@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/dfwgv-library-manager/static/css/main.92c8d4eb.css",
-    "main.js": "/dfwgv-library-manager/static/js/main.b35d3577.js",
+    "main.js": "/dfwgv-library-manager/static/js/main.e92a007a.js",
     "index.html": "/dfwgv-library-manager/index.html",
     "main.92c8d4eb.css.map": "/dfwgv-library-manager/static/css/main.92c8d4eb.css.map",
-    "main.b35d3577.js.map": "/dfwgv-library-manager/static/js/main.b35d3577.js.map"
+    "main.e92a007a.js.map": "/dfwgv-library-manager/static/js/main.e92a007a.js.map"
   },
   "entrypoints": [
     "static/css/main.92c8d4eb.css",
-    "static/js/main.b35d3577.js"
+    "static/js/main.e92a007a.js"
   ]
 }
