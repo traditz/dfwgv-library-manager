@@ -403,9 +403,9 @@ const HomeView = memo(({
                         >
                             Deselect Current Convention
                         </button>
-                        <div className="text-gray-300 mb-4 flex items-center justify-between">
+                        <div className="dfwgv-convention-summary text-gray-300 mb-4">
                             <span>Games for this convention: {gamesInCurrentConventionFilteredBySearch.length || 0}</span>
-                            <div className="flex items-center gap-3">
+                            <div className="dfwgv-checkout-summary">
                                 <span className="whitespace-nowrap">Total checkouts: <span className="font-semibold">{totalConventionCheckouts}</span></span>
                                 <button onClick={() => setShowTopCheckouts(true)} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md" title="Show most-checked-out games for this convention">Top checkouts</button>
                             </div>
@@ -514,11 +514,11 @@ const HomeView = memo(({
                 )}
             </section>
             {showTopCheckouts && (
-                <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
-                    <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg border border-gray-700">
-                        <div className="flex items-center justify-between mb-4">
+                <div className="dfwgv-modal-overlay fixed inset-0 flex items-center justify-center p-4">
+                    <div className="dfwgv-modal-panel bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg border border-gray-700">
+                        <div className="dfwgv-modal-header flex items-start justify-between gap-4 mb-4">
                             <h4 className="text-xl font-semibold text-blue-300">
-                                Top checkouts — {currentConvention?.name}
+                                Top checkouts - {currentConvention?.name}
                             </h4>
                             <button
                                 onClick={() => setShowTopCheckouts(false)}
@@ -531,12 +531,12 @@ const HomeView = memo(({
                         {topConventionCheckouts.length === 0 ? (
                             <p className="text-gray-300">No checkouts yet for this convention.</p>
                         ) : (
-                            <ul className="divide-y divide-gray-700">
+                            <ul className="dfwgv-modal-scroll divide-y divide-gray-700">
                                 {topConventionCheckouts.map((g, i) => (
-                                    <li key={g.id} className="py-2 flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
+                                    <li key={g.id} className="dfwgv-top-checkout-row py-2 flex items-center justify-between">
+                                        <div className="flex items-center gap-3 min-w-0">
                                             <span className="text-gray-400 w-6 text-right">{i + 1}.</span>
-                                            <div className="flex flex-col">
+                                            <div className="flex flex-col min-w-0">
                                                 <span className="text-gray-100 font-medium">{g.name}</span>
                                                 {g.ownerName ? (
                                                     <span className="text-xs text-gray-400">Owner: {g.ownerName}</span>
@@ -2240,9 +2240,9 @@ const App = () => {
             ) : (
                 <main className="dfwgv-library-main">
                     {/* Navigation Buttons */}
-                    <div className="dfwgv-library-nav mb-8 flex flex-col sm:flex-row justify-center items-center gap-4 w-full relative">
+                    <div className="dfwgv-library-nav mb-8 w-full">
                         {/* Primary Navigation Row */}
-                        <div className="flex flex-wrap justify-center gap-4 w-full sm:w-auto">
+                        <div className="dfwgv-primary-nav flex flex-wrap justify-center gap-4 w-full">
                             <button
                                 onClick={() => setCurrentPage('home')}
                                 className={`px-6 py-3 rounded-lg text-lg font-semibold transition duration-300 ease-in-out shadow-md
@@ -2260,7 +2260,7 @@ const App = () => {
                         </div>
 
                         {/* Secondary/Utility Navigation Column - Aligned top-right */}
-                        <div className="flex flex-col items-stretch sm:items-end gap-2 mt-4 sm:mt-0 w-full sm:w-auto sm:absolute sm:top-0 sm:right-0">
+                        <div className="dfwgv-utility-nav flex flex-col items-stretch gap-2 w-full">
                             <button
                                 onClick={() => setCurrentPage('import')}
                                 className={`px-4 py-2 rounded-lg text-sm font-semibold transition duration-300 ease-in-out shadow-md
