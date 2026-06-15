@@ -267,6 +267,37 @@ const AuthPage = memo(({ login, loadingAuth, showMessage }) => {
     );
 });
 
+const AppTopbar = memo(({ currentUser, logout }) => (
+    <header className="dfwgv-topbar">
+        <div className="dfwgv-brand">
+            <a className="dfwgv-logo" href="https://www.dfwgamingvillage.com/" aria-label="Go to DFW Gaming Village home">
+                <img src={`${process.env.PUBLIC_URL}/dfwgv-icon.png`} alt="DFW Gaming Village logo" />
+            </a>
+            <div className="dfwgv-brandText">
+                <div className="dfwgv-title">DFWGV Library Manager</div>
+                <div className="dfwgv-subtitle">Board game library and convention checkouts</div>
+            </div>
+        </div>
+        <div className="dfwgv-authbar">
+            {currentUser ? (
+                <>
+                    <div className="dfwgv-authStatus" title={currentUser.email || currentUser.uid}>
+                        {currentUser.email || currentUser.uid}
+                    </div>
+                    <button
+                        onClick={logout}
+                        className="dfwgv-topbarButton"
+                    >
+                        Logout
+                    </button>
+                </>
+            ) : (
+                <div className="dfwgv-authStatus">Library access</div>
+            )}
+        </div>
+    </header>
+));
+
 
 // Home View Component definition
 const HomeView = memo(({
@@ -2157,7 +2188,7 @@ const App = () => {
 
 
     return (
-        <div className="min-h-screen bg-gray-900 text-gray-100 font-sans flex flex-col items-center p-4 sm:p-6">
+        <div className="dfwgv-library-app min-h-screen text-gray-100 font-sans flex flex-col items-stretch">
             <style>
                 {`
                 html, body, #root { /* Ensure full height for proper min-h-screen behavior */
@@ -2182,6 +2213,8 @@ const App = () => {
                 `}
             </style>
 
+            <AppTopbar currentUser={currentUser} logout={logout} />
+
             {/* Loading overlay for general app operations */}
             {loading && (
                 <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50">
@@ -2205,15 +2238,9 @@ const App = () => {
                     showMessage={showMessage}
                 />
             ) : (
-                <>
-                    <h1 className="text-4xl font-bold text-blue-400 mb-8 mt-4">DFW Gaming Village Library Manager</h1>
-                    <p className="text-sm text-gray-300 mb-6">
-                        Logged in as: <span className="font-mono text-blue-400 break-all">{currentUser.email}</span>
-                        <span className="ml-4">User ID: <span className="font-mono text-blue-400 break-all">{currentUser.uid}</span></span>
-                    </p>
-
+                <main className="dfwgv-library-main">
                     {/* Navigation Buttons */}
-                    <div className="mb-8 flex flex-col sm:flex-row justify-center items-center gap-4 w-full relative">
+                    <div className="dfwgv-library-nav mb-8 flex flex-col sm:flex-row justify-center items-center gap-4 w-full relative">
                         {/* Primary Navigation Row */}
                         <div className="flex flex-wrap justify-center gap-4 w-full sm:w-auto">
                             <button
@@ -2261,12 +2288,6 @@ const App = () => {
                                     ${currentPage === 'removed' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100 hover:bg-gray-600'}`}
                             >
                                 Games Removed From Library ({removedGames.length})
-                            </button>
-                            <button
-                                onClick={logout}
-                                className="px-4 py-2 bg-red-700 text-white rounded-lg text-sm font-semibold hover:bg-red-800 transition duration-300 ease-in-out shadow-md"
-                            >
-                                Logout
                             </button>
                         </div>
                     </div>
@@ -2372,7 +2393,7 @@ const App = () => {
                             />
                         )}
                     </div>
-                </>
+                </main>
             )}
         </div>
     );

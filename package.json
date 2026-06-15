@@ -2,7 +2,7 @@
   "name": "dfw-gaming-app",
   "version": "0.1.0",
   "private": true,
-  "homepage": "https://traditz.github.io/dfwgv-library-manager",
+  "homepage": "https://www.dfwgamingvillage.com/library-manager",
   "dependencies": {
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
