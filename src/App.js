@@ -371,20 +371,38 @@ const HomeView = memo(({
     }, [currentConvention?.games, gamesByIdMap]);
 
     const dailyConventionCheckoutTotals = useMemo(() => {
-        if (!currentConvention?.games) return [];
+        if (!currentConvention?.games || !currentConvention.startDate || !currentConvention.endDate) return [];
+
+        const toDateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        const start = new Date(currentConvention.startDate);
+        const end = new Date(currentConvention.endDate);
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+
         const counts = new Map();
+        const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const lastDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+        while (cursor <= lastDay) {
+            counts.set(toDateKey(cursor), 0);
+            cursor.setDate(cursor.getDate() + 1);
+        }
+
+        let timestampedCheckouts = 0;
         for (const g of currentConvention.games) {
             const times = Array.isArray(g.conventionCheckoutTimes) ? g.conventionCheckoutTimes : [];
             for (const iso of times) {
                 const d = new Date(iso);
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                counts.set(key, (counts.get(key) || 0) + 1);
+                if (Number.isNaN(d.getTime())) continue;
+                const key = toDateKey(d);
+                if (counts.has(key)) {
+                    counts.set(key, counts.get(key) + 1);
+                    timestampedCheckouts += 1;
+                }
             }
         }
-        return Array.from(counts.entries())
-            .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-            .map(([date, count]) => ({ date, count }));
-    }, [currentConvention?.games]);
+        const unassignedCount = Math.max(totalConventionCheckouts - timestampedCheckouts, 0);
+        return Array.from(counts.entries()).map(([date, count]) => ({ date, count, isUnassigned: false }))
+            .concat(unassignedCount > 0 ? [{ date: 'unassigned', count: unassignedCount, isUnassigned: true }] : []);
+    }, [currentConvention?.games, currentConvention?.startDate, currentConvention?.endDate, totalConventionCheckouts]);
 
     return (
         <div className="w-full max-w-4xl">
@@ -410,19 +428,17 @@ const HomeView = memo(({
                                 <button onClick={() => setShowTopCheckouts(true)} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md" title="Show most-checked-out games for this convention">Top checkouts</button>
                             </div>
                         </div>
-                        {dailyConventionCheckoutTotals.length > 0 && (
-                            <div className="mb-4 p-3 bg-gray-700 border border-gray-600 rounded-lg">
-                                <h4 className="text-lg font-semibold text-blue-300 mb-2">Daily checkouts</h4>
-                                <ul className="space-y-1">
-                                    {dailyConventionCheckoutTotals.map(row => (
-                                        <li key={row.date} className="flex justify-between text-gray-100">
-                                            <span>{new Date(row.date + 'T00:00:00').toLocaleDateString()}</span>
-                                            <span className="font-bold">{row.count}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        )}
+                        <div className="mb-4 p-3 bg-gray-700 border border-gray-600 rounded-lg">
+                            <h4 className="text-lg font-semibold text-blue-300 mb-2">Daily checkouts</h4>
+                            <ul className="space-y-1">
+                                {dailyConventionCheckoutTotals.map(row => (
+                                    <li key={row.date} className="flex justify-between text-gray-100">
+                                        <span>{row.isUnassigned ? 'Unassigned historical checkouts' : new Date(row.date + 'T00:00:00').toLocaleDateString()}</span>
+                                        <span className="font-bold">{row.count}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
 
                         <button
                             onClick={exportConventionGamesToCsv}
