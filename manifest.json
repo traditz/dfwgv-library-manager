@@ -3,9 +3,9 @@
   "name": "DFW Gaming Village Library Manager",
   "icons": [
     {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "dfwgv-icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
     },
     {
       "src": "logo512.png",
@@ -15,6 +15,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#d71920",
+  "background_color": "#060608"
 }
