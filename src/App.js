@@ -44,27 +44,145 @@ const MessageBox = memo(({ message, type, onClose, onConfirm }) => {
     if (!message) return null;
 
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full border border-gray-700">
+        <div className="dfwgv-modal-overlay fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="dfwgv-modal-panel bg-gray-800 rounded-lg shadow-xl p-6 max-w-sm w-full border border-gray-700">
                 <p className="text-gray-100 text-lg mb-4">{message}</p>
                 <div className="flex justify-end space-x-3">
                     {type === 'confirm' && (
-                        <button
-                            onClick={onConfirm}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-opacity-50"
-                        >
+                        <button onClick={onConfirm} className="dfwgv-btn dfwgv-btn-primary">
                             Confirm
                         </button>
                     )}
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-600 focus:ring-opacity-50"
-                    >
+                    <button onClick={onClose} className="dfwgv-btn dfwgv-btn-secondary">
                         {type === 'confirm' ? 'Cancel' : 'Close'}
                     </button>
                 </div>
             </div>
         </div>
+    );
+});
+
+// Non-blocking success/info toasts (bottom-right stack, auto-dismissed by App)
+const ToastStack = memo(({ toasts }) => {
+    if (!toasts.length) return null;
+    return (
+        <div className="dfwgv-toasts" role="status" aria-live="polite">
+            {toasts.map(toast => (
+                <div key={toast.id} className="dfwgv-toast">{toast.text}</div>
+            ))}
+        </div>
+    );
+});
+
+// Modal that requires typing a phrase before a destructive action runs
+const TypeConfirmModal = memo(({ title, description, phrase, onConfirm, onClose, loading }) => {
+    const [typed, setTyped] = useState('');
+    const matches = typed.trim() === phrase;
+
+    return (
+        <div className="dfwgv-modal-overlay fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="dfwgv-modal-panel bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full border border-gray-700">
+                <h2 className="text-xl font-semibold text-red-400 mb-2">{title}</h2>
+                <p className="text-gray-300 mb-4">{description}</p>
+                <p className="text-gray-300 mb-2 text-sm">Type <span className="font-bold text-gray-100">{phrase}</span> to confirm:</p>
+                <input
+                    type="text"
+                    className="w-full p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 mb-4"
+                    value={typed}
+                    onChange={(e) => setTyped(e.target.value)}
+                    autoFocus
+                />
+                <div className="flex justify-end space-x-3">
+                    <button
+                        onClick={() => { if (matches) onConfirm(); }}
+                        className="dfwgv-btn dfwgv-btn-danger"
+                        disabled={!matches || loading}
+                    >
+                        {title}
+                    </button>
+                    <button onClick={onClose} className="dfwgv-btn dfwgv-btn-secondary" disabled={loading}>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+
+// Shared game row used by Home, Library, Checked Out, and Removed pages.
+// primary: { label, onClick, tone: 'primary'|'secondary', disabled, title }
+// pill: { label, tone: 'ok'|'out'|'muted' } — also drives the row's edge stripe
+// menuItems: [{ label, onClick, danger }] rendered behind the ⋯ button
+const GameRow = memo(({ game, metaItems, pill, primary, menuItems }) => {
+    const [menuOpen, setMenuOpen] = useState(false);
+
+    const stripe = pill?.tone === 'out' ? 'out' : pill?.tone === 'ok' ? '' : 'neutral';
+
+    return (
+        <li className={`dfwgv-game-row ${stripe}`}>
+            <img
+                src={game.thumbnail || `https://placehold.co/80x80/18181c/b8b8c2?text=No+Img`}
+                alt={game.name}
+                className="dfwgv-game-thumb"
+                loading="lazy"
+            />
+            <div className="dfwgv-game-info">
+                <div className="dfwgv-game-name">
+                    {game.bggId ? (
+                        <a href={`https://boardgamegeek.com/boardgame/${game.bggId}`} target="_blank" rel="noopener noreferrer">
+                            {game.name}
+                        </a>
+                    ) : (
+                        game.name
+                    )}
+                    {game.ownerName ? <span className="dfwgv-owner-chip">{game.ownerName}</span> : null}
+                </div>
+                <div className="dfwgv-game-meta">
+                    {metaItems.map((item, i) => <span key={i}>{item}</span>)}
+                </div>
+            </div>
+            {pill ? <span className={`dfwgv-pill ${pill.tone}`}>{pill.label}</span> : null}
+            <div className="dfwgv-game-actions">
+                {primary ? (
+                    <button
+                        onClick={primary.onClick}
+                        className={`dfwgv-btn ${primary.tone === 'secondary' ? 'dfwgv-btn-secondary' : 'dfwgv-btn-primary'}`}
+                        disabled={primary.disabled}
+                        title={primary.title || ''}
+                    >
+                        {primary.label}
+                    </button>
+                ) : null}
+                {menuItems && menuItems.length > 0 ? (
+                    <div className="dfwgv-more-wrap">
+                        <button
+                            className="dfwgv-more"
+                            onClick={() => setMenuOpen(open => !open)}
+                            aria-label={`More actions for ${game.name}`}
+                            aria-expanded={menuOpen}
+                        >
+                            ⋯
+                        </button>
+                        {menuOpen && (
+                            <>
+                                <button className="dfwgv-menu-backdrop" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
+                                <div className="dfwgv-menu">
+                                    {menuItems.map((item, i) => (
+                                        <button
+                                            key={i}
+                                            className={item.danger ? 'danger' : ''}
+                                            onClick={() => { setMenuOpen(false); item.onClick(); }}
+                                        >
+                                            {item.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                ) : null}
+            </div>
+        </li>
     );
 });
 
@@ -256,7 +374,7 @@ const AuthPage = memo(({ login, loadingAuth, showMessage }) => {
                     </div>
                     <button
                         type="submit"
-                        className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg text-lg font-semibold hover:bg-blue-700 transition duration-300 ease-in-out shadow-md"
+                        className="dfwgv-btn dfwgv-btn-primary w-full text-lg"
                         disabled={loadingAuth}
                     >
                         {loadingAuth ? 'Logging in...' : 'Login'}
@@ -267,7 +385,58 @@ const AuthPage = memo(({ login, loadingAuth, showMessage }) => {
     );
 });
 
-const AppTopbar = memo(({ currentUser, logout }) => (
+// Convention context chip: shows the active convention on every page and doubles as a switcher.
+const ConventionChip = memo(({ conventions, currentConvention, setCurrentConventionId, goToConventions }) => {
+    const [open, setOpen] = useState(false);
+
+    const sortedConventions = useMemo(() => {
+        return [...conventions].sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    }, [conventions]);
+
+    const formatDates = (conv) =>
+        `${new Date(conv.startDate).toLocaleDateString()} – ${new Date(conv.endDate).toLocaleDateString()}`;
+
+    return (
+        <div className="dfwgv-con-wrap">
+            <button
+                className={`dfwgv-con-chip ${currentConvention ? '' : 'none'}`}
+                onClick={() => setOpen(o => !o)}
+                aria-expanded={open}
+                title={currentConvention ? `${currentConvention.name} (${formatDates(currentConvention)})` : 'Select a convention'}
+            >
+                {currentConvention ? currentConvention.name : 'No convention selected'}
+                <span className="caret">▾</span>
+            </button>
+            {open && (
+                <>
+                    <button className="dfwgv-menu-backdrop" aria-label="Close menu" onClick={() => setOpen(false)} />
+                    <div className="dfwgv-con-menu">
+                        {sortedConventions.map(conv => (
+                            <button
+                                key={conv.id}
+                                className={currentConvention?.id === conv.id ? 'selected' : ''}
+                                onClick={() => { setCurrentConventionId(conv.id); setOpen(false); }}
+                            >
+                                {conv.name}
+                                <span className="dates">{formatDates(conv)}</span>
+                            </button>
+                        ))}
+                        {currentConvention && (
+                            <button onClick={() => { setCurrentConventionId(null); setOpen(false); }}>
+                                Deselect convention
+                            </button>
+                        )}
+                        <button onClick={() => { goToConventions(); setOpen(false); }}>
+                            Manage conventions →
+                        </button>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+});
+
+const AppTopbar = memo(({ currentUser, logout, conventions, currentConvention, setCurrentConventionId, goToConventions }) => (
     <header className="dfwgv-topbar">
         <div className="dfwgv-brand">
             <a className="dfwgv-logo" href="https://www.dfwgamingvillage.com/" aria-label="Go to DFW Gaming Village home">
@@ -281,6 +450,12 @@ const AppTopbar = memo(({ currentUser, logout }) => (
         <div className="dfwgv-authbar">
             {currentUser ? (
                 <>
+                    <ConventionChip
+                        conventions={conventions}
+                        currentConvention={currentConvention}
+                        setCurrentConventionId={setCurrentConventionId}
+                        goToConventions={goToConventions}
+                    />
                     <div className="dfwgv-authStatus" title={currentUser.email || currentUser.uid}>
                         {currentUser.email || currentUser.uid}
                     </div>
@@ -304,10 +479,17 @@ const HomeView = memo(({
     loading,
     currentConvention,
     exportConventionGamesToCsv, toggleGameForConvention, toggleGameConventionCheckout, showMessage, setCurrentConventionId,
-    homeSearchInputRef, homeSearchTerm, setHomeSearchTerm, gamesByIdMap, conventions
+    homeSearchInputRef, homeSearchTerm, setHomeSearchTerm, gamesByIdMap, conventions, goToConventions
 }) => {
     const debouncedHomeSearchTerm = useDebounce(homeSearchTerm, 300); // Debounce search input
     const [showTopCheckouts, setShowTopCheckouts] = useState(false);
+    const [homeOwner, setHomeOwner] = useState('All');
+    const [homeSort, setHomeSort] = useState('name');
+
+    const homeOwners = useMemo(() => {
+        const owners = new Set((currentConvention?.games || []).map(g => String(g?.ownerName || '')).filter(Boolean));
+        return ['All', ...[...owners].sort()];
+    }, [currentConvention?.games]);
 
     // Filter games from the current convention based on search term
     const gamesInCurrentConventionFilteredBySearch = useMemo(() => {
@@ -336,18 +518,28 @@ const HomeView = memo(({
 
             const searchLower = String(debouncedHomeSearchTerm).toLowerCase();
 
-            return (
+            const matchesSearch = (
                 gameName.toLowerCase().includes(searchLower) ||
                 ownerName.toLowerCase().includes(searchLower)
             );
+            const matchesOwner = homeOwner === 'All' || ownerName === homeOwner;
+            return matchesSearch && matchesOwner;
         });
 
         return filtered.sort((a, b) => {
+            if (homeSort === 'rating') {
+                const ratingA = gamesByIdMap.get(a.id)?.averageRating ?? a.averageRating ?? -1;
+                const ratingB = gamesByIdMap.get(b.id)?.averageRating ?? b.averageRating ?? -1;
+                return ratingB - ratingA;
+            }
+            if (homeSort === 'checkouts') {
+                return (b.conventionCheckoutCount || 0) - (a.conventionCheckoutCount || 0);
+            }
             const nameA = gamesByIdMap.get(a.id)?.name || a.name;
             const nameB = gamesByIdMap.get(b.id)?.name || b.name;
             return String(nameA).localeCompare(String(nameB));
         });
-    }, [currentConvention, gamesByIdMap, debouncedHomeSearchTerm]);
+    }, [currentConvention, gamesByIdMap, debouncedHomeSearchTerm, homeOwner, homeSort]);
 
     const totalConventionCheckouts = useMemo(() => {
         if (!currentConvention?.games) return 0;
@@ -404,123 +596,202 @@ const HomeView = memo(({
             .concat(unassignedCount > 0 ? [{ date: 'unassigned', count: unassignedCount, isUnassigned: true }] : []);
     }, [currentConvention?.games, currentConvention?.startDate, currentConvention?.endDate, totalConventionCheckouts]);
 
+    const checkedOutNowCount = useMemo(() => {
+        if (!currentConvention?.games) return 0;
+        return currentConvention.games.filter(g => g?.isCheckedOutAtConvention).length;
+    }, [currentConvention?.games]);
+
+    const busiestDay = useMemo(() => {
+        const dated = dailyConventionCheckoutTotals.filter(row => !row.isUnassigned && row.count > 0);
+        if (dated.length === 0) return null;
+        return dated.reduce((max, row) => (row.count > max.count ? row : max));
+    }, [dailyConventionCheckoutTotals]);
+
+    const maxDailyCount = useMemo(() => {
+        return Math.max(1, ...dailyConventionCheckoutTotals.map(row => row.count));
+    }, [dailyConventionCheckoutTotals]);
+
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const formatDayLabel = (dateKey) => {
+        const d = new Date(dateKey + 'T00:00:00');
+        return d.toLocaleDateString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric' });
+    };
+
     return (
         <div className="w-full max-w-4xl">
             <section className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8 w-full border border-gray-700">
-                <h2 className="text-2xl font-semibold text-blue-400 mb-4">Manage Selected Convention</h2>
                 {!currentConvention ? (
-                    <p className="text-gray-400">Please select a convention from the "All Conventions" tab to manage its games.</p>
+                    <div className="dfwgv-empty">
+                        <h3>Pick a convention to get started</h3>
+                        <p>Checkouts, stats, and the convention game list all live under a convention.</p>
+                        {conventions.length === 0 ? (
+                            <button onClick={goToConventions} className="dfwgv-btn dfwgv-btn-primary">
+                                Create your first convention
+                            </button>
+                        ) : (
+                            <div className="dfwgv-con-picker">
+                                {[...conventions]
+                                    .sort((a, b) => new Date(b.startDate) - new Date(a.startDate))
+                                    .map(conv => (
+                                        <button key={conv.id} className="dfwgv-con-pick" onClick={() => setCurrentConventionId(conv.id)}>
+                                            <span>{conv.name}</span>
+                                            <span className="dates">
+                                                {new Date(conv.startDate).toLocaleDateString()} – {new Date(conv.endDate).toLocaleDateString()}
+                                            </span>
+                                        </button>
+                                    ))}
+                            </div>
+                        )}
+                    </div>
                 ) : (
-                    <div>
-                        <h3 className="text-xl font-semibold text-blue-300 mb-3">Currently Managing: {currentConvention.name} ({new Date(currentConvention.startDate).toLocaleDateString()} - {new Date(currentConvention.endDate).toLocaleDateString()})</h3>
-                        <button
-                            onClick={() => {
-                                setCurrentConventionId(null);
-                            }}
-                            className="px-4 py-2 bg-gray-600 text-gray-100 rounded-lg font-semibold hover:bg-gray-700 transition duration-300 ease-in-out shadow-md mb-4"
-                        >
-                            Deselect Current Convention
-                        </button>
-                        <div className="dfwgv-convention-summary text-gray-300 mb-4">
-                            <span>Games for this convention: {gamesInCurrentConventionFilteredBySearch.length || 0}</span>
-                            <div className="dfwgv-checkout-summary">
-                                <span className="whitespace-nowrap">Total checkouts: <span className="font-semibold">{totalConventionCheckouts}</span></span>
-                                <button onClick={() => setShowTopCheckouts(true)} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md" title="Show most-checked-out games for this convention">Top checkouts</button>
+                    <div className="flex flex-col gap-5">
+                        <h2 className="text-2xl font-semibold text-gray-100 m-0">
+                            {currentConvention.name}
+                            <span className="ml-3 text-sm font-normal text-gray-300">
+                                {new Date(currentConvention.startDate).toLocaleDateString()} – {new Date(currentConvention.endDate).toLocaleDateString()}
+                            </span>
+                        </h2>
+
+                        <div className="dfwgv-stat-row">
+                            <div className="dfwgv-stat">
+                                <div className="k">Games at convention</div>
+                                <div className="v">{currentConvention.games?.length || 0}</div>
+                            </div>
+                            <div className="dfwgv-stat">
+                                <div className="k">Checked out now</div>
+                                <div className="v">{checkedOutNowCount}</div>
+                            </div>
+                            <div className="dfwgv-stat">
+                                <div className="k">Total checkouts</div>
+                                <div className="v">{totalConventionCheckouts}</div>
+                            </div>
+                            <div className="dfwgv-stat">
+                                <div className="k">Busiest day</div>
+                                <div className="v">
+                                    {busiestDay ? (
+                                        <>
+                                            {new Date(busiestDay.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' })}
+                                            {' '}<small>· {busiestDay.count}</small>
+                                        </>
+                                    ) : '—'}
+                                </div>
                             </div>
                         </div>
-                        <div className="mb-4 p-3 bg-gray-700 border border-gray-600 rounded-lg">
-                            <h4 className="text-lg font-semibold text-blue-300 mb-2">Daily checkouts</h4>
-                            <ul className="space-y-1">
-                                {dailyConventionCheckoutTotals.map(row => (
-                                    <li key={row.date} className="flex justify-between text-gray-100">
-                                        <span>{row.isUnassigned ? 'Unassigned historical checkouts' : new Date(row.date + 'T00:00:00').toLocaleDateString()}</span>
-                                        <span className="font-bold">{row.count}</span>
-                                    </li>
-                                ))}
-                            </ul>
+
+                        <div className="dfwgv-chart-card">
+                            <div className="dfwgv-chart-head">
+                                <span>Checkouts by day</span>
+                                <button
+                                    onClick={() => setShowTopCheckouts(true)}
+                                    className="dfwgv-btn dfwgv-btn-secondary dfwgv-btn-sm"
+                                    title="Show most-checked-out games for this convention"
+                                >
+                                    Top checkouts
+                                </button>
+                            </div>
+                            {dailyConventionCheckoutTotals.length === 0 ? (
+                                <p className="text-gray-400 m-0">No checkout activity yet.</p>
+                            ) : (
+                                <div className="dfwgv-bars">
+                                    {dailyConventionCheckoutTotals.map(row => (
+                                        <div
+                                            key={row.date}
+                                            className={`dfwgv-bar ${row.isUnassigned ? 'unassigned' : ''} ${row.date === todayKey ? 'today' : ''}`}
+                                            title={row.isUnassigned ? 'Checkouts recorded before daily tracking was added' : formatDayLabel(row.date)}
+                                        >
+                                            <span className="n">{row.count}</span>
+                                            <div className="fill" style={{ height: `${Math.round((row.count / maxDailyCount) * 100)}%` }}></div>
+                                            <span className="d">{row.isUnassigned ? 'Older' : formatDayLabel(row.date)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
-                        <button
-                            onClick={exportConventionGamesToCsv}
-                            className="bg-purple-700 text-white py-2 px-5 rounded-lg font-semibold hover:bg-purple-800 transition duration-300 ease-in-out shadow-md"
-                            disabled={loading || gamesInCurrentConventionFilteredBySearch.length === 0}
-                        >
-                            Export Convention Games to CSV
-                        </button>
-
-                        <div className="mt-4 mb-4 flex items-center gap-4">
+                        <div className="flex flex-wrap items-center gap-3">
                             <input
                                 type="text"
-                                placeholder={`Search games in ${currentConvention.name}...`}
-                                className="w-full p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder={`Search ${currentConvention.games?.length || 0} games at ${currentConvention.name}...`}
+                                className="flex-grow p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400"
+                                style={{ flexBasis: '220px' }}
                                 value={homeSearchTerm}
                                 onChange={(e) => setHomeSearchTerm(e.target.value)}
                                 ref={homeSearchInputRef}
                             />
+                            <select
+                                className="p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100"
+                                value={homeOwner}
+                                onChange={(e) => setHomeOwner(e.target.value)}
+                                aria-label="Filter by owner"
+                            >
+                                {homeOwners.map(owner => (
+                                    <option key={owner} value={owner}>{owner === 'All' ? 'All owners' : owner}</option>
+                                ))}
+                            </select>
+                            <select
+                                className="p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100"
+                                value={homeSort}
+                                onChange={(e) => setHomeSort(e.target.value)}
+                                aria-label="Sort games"
+                            >
+                                <option value="name">Sort: Name</option>
+                                <option value="rating">Sort: Rating</option>
+                                <option value="checkouts">Sort: Checkouts</option>
+                            </select>
+                            <button
+                                onClick={exportConventionGamesToCsv}
+                                className="dfwgv-btn dfwgv-btn-secondary"
+                                disabled={loading || gamesInCurrentConventionFilteredBySearch.length === 0}
+                            >
+                                Export CSV
+                            </button>
                         </div>
 
-                        <div className="mt-4 scrollable-list bg-gray-700 p-3 border border-gray-600">
+                        <div className="scrollable-list bg-gray-700 p-3 border border-gray-600">
                             {gamesInCurrentConventionFilteredBySearch.length === 0 ? (
                                 <p className="text-gray-400">No games found matching your search in this convention.</p>
                             ) : (
-                                <ul className="space-y-3">
+                                <ul className="space-y-3 list-none p-0 m-0">
                                     {gamesInCurrentConventionFilteredBySearch.map(convGame => {
                                         if (!convGame || typeof convGame.id === 'undefined') {
                                             return null;
                                         }
 
                                         const fullGameData = gamesByIdMap.get(convGame.id);
+                                        const displayMinPlayers = fullGameData?.minPlayers || convGame.minPlayers || '?';
+                                        const displayMaxPlayers = fullGameData?.maxPlayers || convGame.maxPlayers || '?';
+                                        const displayPlayingTime = fullGameData?.playingTime || convGame.playingTime || '?';
+                                        const ratingValue = fullGameData?.averageRating ?? convGame.averageRating;
+                                        const displayAverageRating = (typeof ratingValue === 'number') ? ratingValue.toFixed(1) : 'N/A';
+                                        const isOut = !!convGame.isCheckedOutAtConvention;
 
-                                        const displayMinPlayers = fullGameData?.minPlayers || convGame.minPlayers || 'N/A';
-                                        const displayMaxPlayers = fullGameData?.maxPlayers || convGame.maxPlayers || 'N/A';
-                                        const displayPlayingTime = fullGameData?.playingTime || convGame.playingTime || 'N/A';
-                                        const displayAverageRating = (typeof (fullGameData?.averageRating ?? convGame.averageRating) === 'number') ? (fullGameData?.averageRating ?? convGame.averageRating).toFixed(2) : 'N/A';
-
-                                        const checkoutButtonClasses = `px-3 py-1 rounded-lg font-semibold text-xs transition duration-300 ease-in-out shadow-sm ${convGame.isCheckedOutAtConvention ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white`;
                                         return (
-                                            <li key={convGame.id} className="flex flex-col items-start gap-4 bg-gray-900 p-4 rounded-md shadow-sm border border-gray-700">
-                                                <div className="flex flex-col sm:flex-row items-start sm:items-center w-full gap-4">
-                                                    <img src={convGame.thumbnail || `https://placehold.co/80x80/2d3748/cbd5e0?text=No+Img`} alt={convGame.name} className="w-20 h-20 object-cover rounded-md flex-shrink-0" />
-                                                    <div className="flex-grow">
-                                                        <h3 className="text-lg font-semibold text-gray-100">
-                                                            <a href={`https://boardgamegeek.com/boardgame/${convGame.bggId}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                                                                {convGame.name}
-                                                            </a>
-                                                        </h3>
-                                                        <p className="text-sm text-gray-300">Owned by: <span className="font-medium text-blue-400">{convGame.ownerName}</span></p>
-                                                        <p className="text-sm text-gray-300">Players: {displayMinPlayers}-{displayMaxPlayers} | Playtime: {displayPlayingTime} min</p>
-                                                        <p className="text-sm text-gray-300 flex items-center">
-                                                            BGG Rating:
-                                                            <span
-                                                                className="ml-2 text-gray-300 text-xs font-semibold"
-                                                            >
-                                                                {displayAverageRating}
-                                                            </span>
-                                                        </p>
-                                                        <p className="text-sm text-gray-300">
-                                                            Status: <span className={`font-semibold ${convGame.isCheckedOutAtConvention ? 'text-red-400' : 'text-green-400'}`}>
-                                                                {convGame.isCheckedOutAtConvention ? 'Checked Out' : 'Available'}
-                                                            </span>
-                                                            <span className="ml-2">| Convention Checkouts: {convGame.conventionCheckoutCount}</span>
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
-                                                        <button
-                                                            onClick={() => toggleGameConventionCheckout(convGame, currentConvention.id)}
-                                                            className={checkoutButtonClasses}
-                                                            disabled={loading}
-                                                        >
-                                                            {convGame.isCheckedOutAtConvention ? 'Check In' : 'Check Out'}
-                                                        </button>
-                                                        <button
-                                                            onClick={() => toggleGameForConvention(convGame, currentConvention.id)}
-                                                            className="px-3 py-1 bg-red-700 text-white rounded-md text-xs hover:bg-red-800 transition duration-300 ease-in-out"
-                                                        >
-                                                            Remove
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </li>
+                                            <GameRow
+                                                key={convGame.id}
+                                                game={convGame}
+                                                metaItems={[
+                                                    `👥 ${displayMinPlayers}–${displayMaxPlayers}`,
+                                                    `⏱ ${displayPlayingTime} min`,
+                                                    <><span className="star">★</span> {displayAverageRating}</>,
+                                                    `×${convGame.conventionCheckoutCount || 0} checkouts`,
+                                                ]}
+                                                pill={isOut ? { label: 'Checked out', tone: 'out' } : { label: 'Available', tone: 'ok' }}
+                                                primary={{
+                                                    label: isOut ? 'Check In' : 'Check Out',
+                                                    tone: isOut ? 'secondary' : 'primary',
+                                                    onClick: () => toggleGameConventionCheckout(convGame, currentConvention.id),
+                                                    disabled: loading,
+                                                }}
+                                                menuItems={[
+                                                    {
+                                                        label: 'Remove from convention',
+                                                        danger: true,
+                                                        onClick: () => toggleGameForConvention(convGame, currentConvention.id),
+                                                    },
+                                                ]}
+                                            />
                                         );
                                     })}
                                 </ul>
@@ -572,24 +843,32 @@ const HomeView = memo(({
 });
 
 // Import Collections Page Component definition
-const ImportCollectionsPage = memo(({ importGames, loading, showMessage }) => {
+const ImportCollectionsPage = memo(({ importGames, loading, showMessage, importStatus, importResults }) => {
     const [owner1BggUsername, setOwner1BggUsername] = useState('');
     const [owner2BggUsername, setOwner2BggUsername] = useState('');
 
     const handleImportGames = () => {
-        importGames(owner1BggUsername, owner2BggUsername);
+        if (!owner1BggUsername.trim() && !owner2BggUsername.trim()) {
+            showMessage("Enter at least one BGG username to import.", 'error');
+            return;
+        }
+        importGames(owner1BggUsername.trim(), owner2BggUsername.trim());
     };
 
     return (
         <section className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8 w-full max-w-4xl border border-gray-700">
-            <h2 className="text-2xl font-semibold text-blue-400 mb-4">Import BoardGameGeek Collections</h2>
+            <h2 className="text-2xl font-semibold text-gray-100 mb-2">Import BoardGameGeek Collections</h2>
+            <p className="text-gray-300 mb-4 text-sm">
+                Pulls each owner's collection from BGG (expansions excluded). Games already in the library
+                keep their checkout history; only changed details are updated.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <div>
                     <label htmlFor="owner1Bgg" className="block text-sm font-medium text-gray-300 mb-1">Owner 1 BGG Username</label>
                     <input
                         type="text"
                         id="owner1Bgg"
-                        className="w-full p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400"
                         value={owner1BggUsername}
                         onChange={(e) => setOwner1BggUsername(e.target.value)}
                         placeholder="e.g., bgg_user_one"
@@ -600,7 +879,7 @@ const ImportCollectionsPage = memo(({ importGames, loading, showMessage }) => {
                     <input
                         type="text"
                         id="owner2Bgg"
-                        className="w-full p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500"
+                        className="w-full p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400"
                         value={owner2BggUsername}
                         onChange={(e) => setOwner2BggUsername(e.target.value)}
                         placeholder="e.g., bgg_user_two"
@@ -609,11 +888,35 @@ const ImportCollectionsPage = memo(({ importGames, loading, showMessage }) => {
             </div>
             <button
                 onClick={handleImportGames}
-                className="w-full bg-green-700 text-white py-3 px-6 rounded-lg text-lg font-semibold hover:bg-green-800 transition duration-300 ease-in-out shadow-md"
+                className="dfwgv-btn dfwgv-btn-primary w-full text-lg"
                 disabled={loading}
             >
-                Import Games from BoardGameGeek
+                {loading && importStatus ? 'Importing…' : 'Import Games from BoardGameGeek'}
             </button>
+
+            {importStatus && (
+                <div className="dfwgv-import-status">
+                    <span className="spin" aria-hidden="true"></span>
+                    <span>{importStatus}</span>
+                </div>
+            )}
+
+            {!importStatus && importResults.length > 0 && (
+                <ul className="dfwgv-import-results">
+                    {importResults.map((result, i) => (
+                        <li key={i} className={result.error ? 'failed' : ''}>
+                            <b>{result.username}:</b>{' '}
+                            {result.error ? (
+                                <span className="detail">{result.error}</span>
+                            ) : (
+                                <span className="detail">
+                                    {result.fetched} games in collection · {result.added} added · {result.updated} updated
+                                </span>
+                            )}
+                        </li>
+                    ))}
+                </ul>
+            )}
         </section>
     );
 });
@@ -651,9 +954,9 @@ const AddCustomGameModal = memo(({ onClose, onSave, loading, showMessage }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-lg w-full border border-gray-700 overflow-y-auto max-h-[90vh]">
-                <h2 className="text-2xl font-semibold text-blue-400 mb-4">Add Custom Game</h2>
+        <div className="dfwgv-modal-overlay fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="dfwgv-modal-panel bg-gray-800 rounded-lg shadow-xl p-6 max-w-lg w-full border border-gray-700 overflow-y-auto max-h-[90vh]">
+                <h2 className="text-2xl font-semibold text-gray-100 mb-4">Add Custom Game</h2>
                 <div className="flex flex-col gap-4 mb-4">
                     <label className="block text-sm font-medium text-gray-300">
                         Game Name: <span className="text-red-500">*</span>
@@ -750,14 +1053,14 @@ const AddCustomGameModal = memo(({ onClose, onSave, loading, showMessage }) => {
                 <div className="flex justify-end space-x-3">
                     <button
                         onClick={handleSave}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-300 ease-in-out"
+                        className="dfwgv-btn dfwgv-btn-primary"
                         disabled={loading}
                     >
                         Save Game
                     </button>
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 transition duration-300 ease-in-out"
+                        className="dfwgv-btn dfwgv-btn-secondary"
                         disabled={loading}
                     >
                         Cancel
@@ -771,13 +1074,14 @@ const AddCustomGameModal = memo(({ onClose, onSave, loading, showMessage }) => {
 
 // Game Library Page Component definition
 const GameLibraryPage = memo(({
-    games, toggleGameForConvention, currentConvention, loading, showMessage, removeGameFromLibrary, clearAllData, onAddCustomGame,
-    librarySearchInputRef, searchTerm, setSearchTerm, clearAllCheckoutData, gamesByIdMap
+    games, toggleGameForConvention, currentConvention, loading, showMessage, removeGameFromLibrary, onAddCustomGame,
+    librarySearchInputRef, searchTerm, setSearchTerm, gamesByIdMap
 }) => {
     // --- MOVED STATE DECLARATIONS TO TOP ---
     const scrollRef = useRef(0);
     const scrollPosition = useRef(0);
     const [selectedOwner, setSelectedOwner] = useState('All');
+    const [librarySort, setLibrarySort] = useState('name');
     // --- END MOVED STATE DECLARATIONS ---
 
     const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -824,45 +1128,67 @@ const GameLibraryPage = memo(({
                 ownerName.toLowerCase().includes(debouncedSearchTermLower)) &&
                 (selectedOwner === 'All' || ownerName === selectedOwner)
             );
-        }).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))); // Sort after filtering
-    }, [games, debouncedSearchTerm, selectedOwner]); // Dependencies for useMemo
+        }).sort((a, b) => {
+            if (librarySort === 'rating') {
+                return (b.averageRating ?? -1) - (a.averageRating ?? -1);
+            }
+            if (librarySort === 'checkouts') {
+                return (b.checkoutCount || 0) - (a.checkoutCount || 0);
+            }
+            return String(a.name || '').localeCompare(String(b.name || ''));
+        });
+    }, [games, debouncedSearchTerm, selectedOwner, librarySort]); // Dependencies for useMemo
 
 
     return (
         <section className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8 w-full max-w-4xl border border-gray-700">
-            <h2 className="text-2xl font-semibold text-blue-400 mb-4">Your Combined Board Game Library</h2>
-            <div className="mb-4 flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <h2 className="text-2xl font-semibold text-gray-100 m-0">Game Library</h2>
+                <button
+                    onClick={onAddCustomGame}
+                    className="dfwgv-btn dfwgv-btn-secondary"
+                    disabled={loading}
+                >
+                    Add Custom Game
+                </button>
+            </div>
+            <div className="mb-4 flex flex-wrap gap-3">
                 <input
                     type="text"
                     placeholder="Search games by name or owner..."
-                    className="w-full sm:flex-grow p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400 focus:ring-blue-500 focus:border-blue-500"
+                    className="flex-grow p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400"
+                    style={{ flexBasis: '220px' }}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     ref={librarySearchInputRef}
                 />
                 <select
-                    className="p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 focus:ring-blue-500 focus:border-blue-500"
+                    className="p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100"
                     value={selectedOwner}
                     onChange={(e) => setSelectedOwner(e.target.value)}
+                    aria-label="Filter by owner"
                 >
                     {uniqueOwners.map(owner => (
-                        <option key={owner} value={owner}>{owner}</option>
+                        <option key={owner} value={owner}>{owner === 'All' ? 'All owners' : owner}</option>
                     ))}
+                </select>
+                <select
+                    className="p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100"
+                    value={librarySort}
+                    onChange={(e) => setLibrarySort(e.target.value)}
+                    aria-label="Sort games"
+                >
+                    <option value="name">Sort: Name</option>
+                    <option value="rating">Sort: Rating</option>
+                    <option value="checkouts">Sort: Checkouts</option>
                 </select>
             </div>
             <p className="text-gray-300 mb-4">Total Games: {games.filter(g => !g.isRemoved).length} (showing {libraryFilteredGames.length} matching entries)</p>
-            <button
-                onClick={onAddCustomGame}
-                className="mb-4 px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-300 ease-in-out shadow-md"
-                disabled={loading}
-            >
-                Add Custom Game
-            </button>
             <div ref={scrollRef} className="scrollable-list bg-gray-700 p-3 border border-gray-600">
                 {libraryFilteredGames.length === 0 ? (
                     <p className="text-gray-400">No games found matching your search, or no games imported yet.</p>
                 ) : (
-                    <ul className="space-y-3">
+                    <ul className="space-y-3 list-none p-0 m-0">
                         {libraryFilteredGames.map(game => {
                             if (!game || typeof game.id === 'undefined') {
                                 return null;
@@ -871,76 +1197,52 @@ const GameLibraryPage = memo(({
                             const isAddRemoveButtonDisabled = !currentConvention;
 
                             return (
-                                <li key={game.id} className="flex flex-col items-start gap-4 bg-gray-900 p-4 rounded-md shadow-sm border border-gray-700">
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center w-full gap-4">
-                                        <img src={game.thumbnail || `https://placehold.co/80x80/2d3748/cbd5e0?text=No+Img`} alt={game.name} className="w-20 h-20 object-cover rounded-md flex-shrink-0" />
-                                        <div className="flex-grow">
-                                            <h3 className="text-lg font-semibold text-gray-100">
-                                                <a href={`https://boardgamegeek.com/boardgame/${game.bggId}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                                                    {game.name}
-                                                </a>
-                                            </h3>
-                                            <p className="text-sm text-gray-300">Owned by: <span className="font-medium text-blue-400">{game.ownerName}</span></p>
-                                            <p className="text-sm text-gray-300">Players: {game.minPlayers || 'N/A'}-{game.maxPlayers || 'N/A'} | Playtime: {game.playingTime || 'N/A'} min</p>
-                                            <p className="text-sm text-gray-300 flex items-center">
-                                                BGG Rating:
-                                                <span
-                                                    className="ml-2 text-gray-300 text-xs font-semibold"
-                                                >
-                                                    {(typeof game.averageRating === 'number') ? game.averageRating.toFixed(2) : 'N/A'}
-                                                </span>
-                                            </p>
-                                            <p className="text-sm text-gray-300">
-                                                Status: <span className={`font-semibold ${game.isCheckedOut ? 'text-red-400' : 'text-green-400'}`}>
-                                                    {game.isCheckedOut ? 'Checked Out' : 'Available'}
-                                                </span>
-                                                <span className="ml-2">| Overall Checkouts: {game.checkoutCount}</span>
-                                            </p>
-                                        </div>
-                                        <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
-                                            <button
-                                                onClick={() => toggleGameForConvention(game, currentConvention?.id)}
-                                                className={`px-4 py-2 rounded-lg font-semibold transition duration-300 ease-in-out shadow-md ${isGameInCurrentConvention ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'} text-white ${isAddRemoveButtonDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                disabled={loading || isAddRemoveButtonDisabled}
-                                                title={isAddRemoveButtonDisabled ? "Select a convention first to add/remove games" : ""}
-                                            >
-                                                {isGameInCurrentConvention ? 'Remove from Convention' : 'Add to Convention'}
-                                            </button>
-                                            <button
-                                                onClick={() => showMessage(
-                                                    `Are you sure you want to remove "${game.name} (${game.ownerName})" from the library? It will be moved to the "Removed Games" tab, but its historical data will be preserved.`,
-                                                    'confirm',
-                                                    () => removeGameFromLibrary(game)
-                                                )}
-                                                className="px-4 py-2 bg-red-700 text-white rounded-lg font-semibold hover:bg-red-800 transition duration-300 ease-in-out shadow-sm"
-                                                disabled={loading}
-                                            >
-                                                Remove from Library
-                                            </button>
-                                        </div>
-                                    </div>
-                                </li>
+                                <GameRow
+                                    key={game.id}
+                                    game={game}
+                                    metaItems={[
+                                        `👥 ${game.minPlayers || '?'}–${game.maxPlayers || '?'}`,
+                                        `⏱ ${game.playingTime || '?'} min`,
+                                        <><span className="star">★</span> {(typeof game.averageRating === 'number') ? game.averageRating.toFixed(1) : 'N/A'}</>,
+                                        `×${game.checkoutCount || 0} checkouts`,
+                                    ]}
+                                    pill={
+                                        isGameInCurrentConvention
+                                            ? { label: 'At convention', tone: 'ok' }
+                                            : { label: 'In library', tone: 'muted' }
+                                    }
+                                    primary={
+                                        isGameInCurrentConvention
+                                            ? {
+                                                label: 'Remove from Convention',
+                                                tone: 'secondary',
+                                                onClick: () => toggleGameForConvention(game, currentConvention?.id),
+                                                disabled: loading,
+                                            }
+                                            : {
+                                                label: 'Add to Convention',
+                                                tone: 'primary',
+                                                onClick: () => toggleGameForConvention(game, currentConvention?.id),
+                                                disabled: loading || isAddRemoveButtonDisabled,
+                                                title: isAddRemoveButtonDisabled ? 'Select a convention first to add/remove games' : '',
+                                            }
+                                    }
+                                    menuItems={[
+                                        {
+                                            label: 'Remove from Library',
+                                            danger: true,
+                                            onClick: () => showMessage(
+                                                `Are you sure you want to remove "${game.name} (${game.ownerName})" from the library? It will be moved to the "Removed" tab, but its historical data will be preserved.`,
+                                                'confirm',
+                                                () => removeGameFromLibrary(game)
+                                            ),
+                                        },
+                                    ]}
+                                />
                             );
                         })}
                     </ul>
                 )}
-            </div>
-            <div className="flex flex-col sm:flex-row justify-between items-center mt-8 gap-4">
-                <button
-                    onClick={clearAllData}
-                    className="px-4 py-2 bg-red-800 text-white rounded-lg text-sm font-semibold hover:bg-red-900 transition duration-300 ease-in-out shadow-md w-full sm:w-auto"
-                    disabled={loading}
-                >
-                    Clear All Data (DANGER!)
-                </button>
-                <button
-                    onClick={clearAllCheckoutData}
-                    className="px-4 py-2 bg-orange-700 text-white rounded-lg text-sm font-semibold hover:bg-orange-800 transition duration-300 ease-in-out shadow-md w-full sm:w-auto"
-                    disabled={loading}
-                    title="Resets all game and convention checkout counts to zero."
-                >
-                    Clear All Checkout Data
-                </button>
             </div>
         </section>
     );
@@ -950,51 +1252,37 @@ const GameLibraryPage = memo(({
 const RemovedGamesPage = memo(({ removedGames, reAddGameToLibrary, loading, showMessage }) => {
     return (
         <section className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8 w-full max-w-4xl border border-gray-700">
-            <h2 className="text-2xl font-semibold text-blue-400 mb-4">Games Removed From Library</h2>
-            <p className="text-gray-300 mb-4">These games have been removed from the library.</p>
+            <h2 className="text-2xl font-semibold text-gray-100 mb-2">Removed Games</h2>
+            <p className="text-gray-300 mb-4 text-sm">Removed from the library but kept for their checkout history. Re-add a game to bring it back.</p>
             <div className="scrollable-list bg-gray-700 p-3 border border-gray-600">
                 {removedGames.length === 0 ? (
                     <p className="text-gray-400">No games have been removed from the library yet.</p>
                 ) : (
-                    <ul className="space-y-3">
+                    <ul className="space-y-3 list-none p-0 m-0">
                         {removedGames.map(game => {
                             if (!game || typeof game.id === 'undefined') {
                                 return null;
                             }
                             return (
-                                <li key={game.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-gray-900 p-4 rounded-md shadow-sm border border-gray-700">
-                                    <img src={game.thumbnail || `https://placehold.co/80x80/2d3748/cbd5e0?text=No+Img`} alt={game.name} className="w-20 h-20 object-cover rounded-md flex-shrink-0" />
-                                    <div className="flex-grow">
-                                        <h3 className="text-lg font-semibold text-gray-100">
-                                            <a href={`https://boardgamegeek.com/boardgame/${game.bggId}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                                                {game.name}
-                                            </a>
-                                        </h3>
-                                        <p className="text-sm text-gray-300">Owned by: <span className="font-medium text-blue-400">{game.ownerName}</span></p>
-                                        <p className="text-sm text-gray-300">Overall Checkouts: {game.checkoutCount}</p>
-                                        <p className="text-sm text-gray-300 flex items-center">
-                                            BGG Rating:
-                                            <span
-                                                className="ml-2 text-gray-300 text-xs font-semibold"
-                                            >
-                                                {(typeof game.averageRating === 'number') ? game.averageRating.toFixed(2) : 'N/A'}
-                                            </span>
-                                        </p>
-                                    </div>
-                                    <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
-                                        <button
-                                            onClick={() => showMessage(
-                                                `Are you sure you want to re-add "${game.name} (${game.ownerName})" to the main library?`,
-                                                'confirm',
-                                                () => reAddGameToLibrary(game)
-                                            )}
-                                            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition duration-300 ease-in-out shadow-sm"
-                                            disabled={loading}
-                                        >
-                                            Re-add to Library
-                                        </button>
-                                    </div>
-                                </li>
+                                <GameRow
+                                    key={game.id}
+                                    game={game}
+                                    metaItems={[
+                                        <><span className="star">★</span> {(typeof game.averageRating === 'number') ? game.averageRating.toFixed(1) : 'N/A'}</>,
+                                        `×${game.checkoutCount || 0} checkouts`,
+                                    ]}
+                                    pill={{ label: 'Removed', tone: 'muted' }}
+                                    primary={{
+                                        label: 'Re-add to Library',
+                                        tone: 'primary',
+                                        onClick: () => showMessage(
+                                            `Are you sure you want to re-add "${game.name} (${game.ownerName})" to the main library?`,
+                                            'confirm',
+                                            () => reAddGameToLibrary(game)
+                                        ),
+                                        disabled: loading,
+                                    }}
+                                />
                             );
                         })}
                     </ul>
@@ -1023,9 +1311,9 @@ const EditConventionModal = memo(({ convention, onClose, onSave, loading, showMe
     };
 
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full border border-gray-700">
-                <h2 className="text-2xl font-semibold text-blue-400 mb-4">Edit Convention</h2>
+        <div className="dfwgv-modal-overlay fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="dfwgv-modal-panel bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full border border-gray-700">
+                <h2 className="text-2xl font-semibold text-gray-100 mb-4">Edit Convention</h2>
                 <div className="flex flex-col gap-4 mb-4">
                     <label className="block text-sm font-medium text-gray-300">
                         Convention Name:
@@ -1060,14 +1348,14 @@ const EditConventionModal = memo(({ convention, onClose, onSave, loading, showMe
                 <div className="flex justify-end space-x-3">
                     <button
                         onClick={handleSave}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition duration-300 ease-in-out"
+                        className="dfwgv-btn dfwgv-btn-primary"
                         disabled={loading}
                     >
                         Save Changes
                     </button>
                     <button
                         onClick={onClose}
-                        className="px-4 py-2 bg-gray-600 text-gray-100 rounded-md hover:bg-gray-700 transition duration-300 ease-in-out"
+                        className="dfwgv-btn dfwgv-btn-secondary"
                         disabled={loading}
                     >
                         Cancel
@@ -1112,10 +1400,10 @@ const AllConventionsPage = memo(({
     return (
         <section className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8 w-full max-w-4xl border border-gray-700">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-semibold text-blue-400">All Conventions</h2>
+                <h2 className="text-2xl font-semibold text-gray-100 m-0">Conventions</h2>
                 <button
                     onClick={toggleSortOrder}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition duration-300 ease-in-out shadow-md"
+                    className="dfwgv-btn dfwgv-btn-secondary dfwgv-btn-sm"
                 >
                     Sort by Date: {sortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
                 </button>
@@ -1154,7 +1442,7 @@ const AllConventionsPage = memo(({
                     </div>
                     <button
                         onClick={handleCreateConvention}
-                        className="bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 transition duration-300 ease-in-out shadow-md"
+                        className="dfwgv-btn dfwgv-btn-primary"
                         disabled={loading}
                     >
                         Create Convention
@@ -1169,38 +1457,35 @@ const AllConventionsPage = memo(({
                 ) : (
                     <ul className="space-y-2">
                         {sortedConventions.map(conv => {
-                            const selectButtonClasses = `px-4 py-2 rounded-md font-semibold transition duration-300 ease-in-out ${currentConvention?.id === conv.id ? 'bg-blue-800 text-white' : 'bg-gray-600 text-gray-100 hover:bg-gray-700'}`;
+                            const isSelected = currentConvention?.id === conv.id;
                             return (
                                 <li key={conv.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gray-900 p-3 rounded-md shadow-sm border border-gray-700">
                                     <div className="flex-grow">
-                                        <span className="font-medium text-gray-100 block">{conv.name}</span>
+                                        <span className="font-medium text-gray-100 block">
+                                            {conv.name}
+                                            {isSelected && <span className="dfwgv-pill ok ml-2">Selected</span>}
+                                        </span>
                                         <span className="text-sm text-gray-300">
                                             {new Date(conv.startDate).toLocaleDateString()} - {new Date(conv.endDate).toLocaleDateString()}
                                         </span>
                                     </div>
                                     <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
                                         <button
-                                            onClick={() => {
-                                                if (currentConvention?.id === conv.id) {
-                                                    setCurrentConventionId(null);
-                                                } else {
-                                                    setCurrentConventionId(conv.id);
-                                                }
-                                            }}
-                                            className={selectButtonClasses}
+                                            onClick={() => setCurrentConventionId(isSelected ? null : conv.id)}
+                                            className={`dfwgv-btn ${isSelected ? 'dfwgv-btn-secondary' : 'dfwgv-btn-primary'}`}
                                         >
-                                            {currentConvention?.id === conv.id ? 'Selected (Deselect)' : 'Select'}
+                                            {isSelected ? 'Deselect' : 'Select'}
                                         </button>
                                         <button
                                             onClick={() => setEditingConvention(conv)}
-                                            className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-semibold hover:bg-yellow-700 transition duration-300 ease-in-out shadow-md"
+                                            className="dfwgv-btn dfwgv-btn-secondary"
                                             disabled={loading}
                                         >
                                             Edit
                                         </button>
                                         <button
                                             onClick={() => deleteConvention(conv)}
-                                            className="px-4 py-2 bg-red-700 text-white rounded-lg font-semibold hover:bg-red-800 transition duration-300 ease-in-out shadow-md"
+                                            className="dfwgv-btn dfwgv-btn-danger"
                                             disabled={loading}
                                         >
                                             Delete
@@ -1239,52 +1524,106 @@ const CheckedOutGamesPage = memo(({ currentConvention, toggleGameConventionCheck
 
     return (
         <section className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8 w-full max-w-4xl border border-gray-700">
-            <h2 className="text-2xl font-semibold text-blue-400 mb-4">Checked Out Games for {currentConvention?.name || 'Selected Convention'}</h2>
+            <h2 className="text-2xl font-semibold text-gray-100 mb-4">
+                Checked Out Games
+                {currentConvention ? <span className="ml-3 text-sm font-normal text-gray-300">{currentConvention.name}</span> : null}
+            </h2>
             {!currentConvention ? (
-                <p className="text-gray-400">Please select a convention from the "All Conventions" tab to view its checked out games.</p>
+                <p className="text-gray-400">Select a convention (use the chip in the top bar) to view its checked out games.</p>
             ) : checkedOutGames.length === 0 ? (
-                <p className="text-gray-400">No games are currently checked out for this convention.</p>
+                <p className="text-gray-400">No games are currently checked out for this convention. 🎉</p>
             ) : (
                 <div className="mt-4 scrollable-list bg-gray-700 p-3 border border-gray-600">
-                    <ul className="space-y-3">
+                    <ul className="space-y-3 list-none p-0 m-0">
                         {checkedOutGames.map(convGame => {
                             if (!convGame || typeof convGame.id === 'undefined') {
                                 return null;
                             }
-                            const displayAverageRating = (typeof convGame?.averageRating === 'number') ? convGame.averageRating.toFixed(2) : 'N/A';
                             return (
-                                <li key={convGame.id} className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-gray-900 p-4 rounded-md shadow-sm border border-gray-700">
-                                    <img src={convGame.thumbnail || `https://placehold.co/50x50/2d3748/cbd5e0?text=No+Img`} alt={convGame.name} className="w-12 h-12 object-cover rounded-md flex-shrink-0" />
-                                    <div className="flex-grow">
-                                        <span className="font-medium text-gray-100 block">
-                                            <a href={`https://boardgamegeek.com/boardgame/${convGame.bggId}`} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline">
-                                                {convGame.name}
-                                            </a>
-                                            <span className="text-sm text-gray-300">({convGame.ownerName})</span>
-                                        </span>
-                                        <p className="text-sm text-gray-300">Convention Checkouts: {convGame.conventionCheckoutCount || 0}</p>
-                                        <p className="text-sm text-gray-300">Status (Convention): <span className="font-semibold text-red-400">Checked Out</span></p>
-                                        <p className="text-sm text-gray-300 flex items-center">
-                                            BGG Rating:
-                                            <span className="ml-2 text-gray-300 text-xs font-semibold">
-                                                {displayAverageRating}
-                                            </span>
-                                        </p>
-                                    </div>
-                                    <div className="flex flex-col sm:flex-row gap-2 mt-3 sm:mt-0">
-                                        <button
-                                            onClick={() => handleToggleAndFocus(convGame, currentConvention.id)}
-                                            className="px-3 py-1 bg-green-600 text-white rounded-lg font-semibold text-xs hover:bg-green-700 transition duration-300 ease-in-out shadow-sm"
-                                            disabled={loading}
-                                        >
-                                            Check In
-                                        </button>
-                                    </div>
-                                </li>
+                                <GameRow
+                                    key={convGame.id}
+                                    game={convGame}
+                                    metaItems={[
+                                        <><span className="star">★</span> {(typeof convGame?.averageRating === 'number') ? convGame.averageRating.toFixed(1) : 'N/A'}</>,
+                                        `×${convGame.conventionCheckoutCount || 0} checkouts`,
+                                    ]}
+                                    pill={{ label: 'Checked out', tone: 'out' }}
+                                    primary={{
+                                        label: 'Check In',
+                                        tone: 'primary',
+                                        onClick: () => handleToggleAndFocus(convGame, currentConvention.id),
+                                        disabled: loading,
+                                    }}
+                                />
                             );
                         })}
                     </ul>
                 </div>
+            )}
+        </section>
+    );
+});
+
+// Settings page: danger zone for the destructive clear-all operations,
+// each gated behind a type-to-confirm modal instead of stacked confirm dialogs.
+const SettingsPage = memo(({ performClearAllCheckoutData, performClearAllData, loading }) => {
+    const [confirming, setConfirming] = useState(null); // null | 'checkouts' | 'all'
+
+    return (
+        <section className="bg-gray-800 p-6 rounded-xl shadow-lg mb-8 w-full max-w-4xl border border-gray-700 dfwgv-danger-zone">
+            <h2 className="text-2xl font-semibold text-gray-100 mb-2">Settings</h2>
+            <p className="text-gray-300 mb-4 text-sm">
+                Danger zone. These actions affect the whole library and cannot be undone.
+            </p>
+
+            <div className="dfwgv-danger-item">
+                <div className="info">
+                    <b>Clear all checkout data</b>
+                    <span>Resets every game and convention checkout count to zero. Games and conventions are kept.</span>
+                </div>
+                <button
+                    onClick={() => setConfirming('checkouts')}
+                    className="dfwgv-btn dfwgv-btn-danger"
+                    disabled={loading}
+                >
+                    Clear checkout data
+                </button>
+            </div>
+
+            <div className="dfwgv-danger-item">
+                <div className="info">
+                    <b>Delete all games</b>
+                    <span>Permanently deletes every game and its checkout history. Conventions are kept.</span>
+                </div>
+                <button
+                    onClick={() => setConfirming('all')}
+                    className="dfwgv-btn dfwgv-btn-danger"
+                    disabled={loading}
+                >
+                    Delete all games
+                </button>
+            </div>
+
+            {confirming === 'checkouts' && (
+                <TypeConfirmModal
+                    title="Clear checkout data"
+                    description="Every checkout count, on every game and every convention, will be reset to zero. This cannot be undone."
+                    phrase="RESET"
+                    loading={loading}
+                    onClose={() => setConfirming(null)}
+                    onConfirm={async () => { await performClearAllCheckoutData(); setConfirming(null); }}
+                />
+            )}
+
+            {confirming === 'all' && (
+                <TypeConfirmModal
+                    title="Delete all games"
+                    description="Every game and its full checkout history will be permanently deleted. This cannot be undone."
+                    phrase="DELETE"
+                    loading={loading}
+                    onClose={() => setConfirming(null)}
+                    onConfirm={async () => { await performClearAllData(); setConfirming(null); }}
+                />
             )}
         </section>
     );
@@ -1354,6 +1693,20 @@ const App = () => {
         setConfirmAction(null);
     }, []);
 
+    // Non-blocking toasts for success/info feedback (modals stay for errors and confirmations)
+    const [toasts, setToasts] = useState([]);
+    const showToast = useCallback((text) => {
+        const id = `${Date.now()}-${Math.random()}`;
+        setToasts(prev => [...prev, { id, text }]);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, 4000);
+    }, []);
+
+    // Import progress + per-username results, surfaced on the Import page
+    const [importStatus, setImportStatus] = useState('');
+    const [importResults, setImportResults] = useState([]);
+
     // Function to focus the appropriate search input based on the current page and clear its value
     const focusSearchInput = useCallback(() => {
         if (currentPage === 'home' && homeSearchInputRef.current) {
@@ -1364,17 +1717,28 @@ const App = () => {
     }, [currentPage]);
 
 
-    // Fetch games from BGG API - Modified to exclude expansions
+    // Fetch games from BGG API - Modified to exclude expansions.
+    // Returns { games, error } so the caller can report per-username results.
     const fetchBggCollection = useCallback(async (username) => {
-        // console.log(`[BGG Import] Fetching collection for username: ${username}`); // Removed for performance
         try {
-            // Exclude expansions using the excludesubtype parameter
-            const url = `https://boardgamegeek.com/xmlapi2/collection?username=${username}&stats=1&excludesubtype=boardgameexpansion`;
-            const response = await retryFetch(url, {}, 5, 1000);
+            // BGG's XML API now requires an auth token, so requests go through the
+            // dfwgv-bgg-proxy Cloudflare Worker (holds the token, excludes expansions by default).
+            const url = `https://dfwgv-bgg-proxy.joemsprague.workers.dev/api/bgg-collection?username=${encodeURIComponent(username)}`;
+            let response = await retryFetch(url, {}, 5, 1000);
+            // BGG queues large collection requests and answers 202 until the export is ready.
+            for (let attempt = 0; response.status === 202 && attempt < 5; attempt++) {
+                setImportStatus(`BGG is preparing ${username}'s collection, waiting…`);
+                await new Promise(res => setTimeout(res, 3000));
+                response = await retryFetch(url, {}, 5, 1000);
+            }
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                throw new Error(`BGG returned HTTP ${response.status}`);
             }
             const text = await response.text();
+            if (text.includes('<errors>')) {
+                const errorMessage = text.match(/<message>([^<]*)<\/message>/)?.[1] || 'BGG reported an error';
+                throw new Error(`${errorMessage} — check the username`);
+            }
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(text, "text/xml");
             const items = xmlDoc.getElementsByTagName('item');
@@ -1426,13 +1790,12 @@ const App = () => {
                 // console.log(`[BGG Import Debug] Game: ${name}, BGG ID: ${bggId}, Coll ID: ${collId}, Subtype: boardgame (excluded expansions), isExpansion: ${isExpansion}`); // Removed for performance
             }
             // console.log(`[BGG Import] Fetched ${newGames.length} games for ${username}.`); // Removed for performance
-            return newGames;
+            return { games: newGames, error: null };
         } catch (error) {
             console.error(`[BGG Import] Error fetching BGG collection for ${username}:`, error);
-            showMessage(`Failed to fetch collection for ${username}. ${error.message}. Please check the username or try again later.`, 'error');
-            return [];
+            return { games: [], error: error.message };
         }
-    }, [showMessage, currentUser]); // Dependency on currentUser
+    }, [currentUser]); // Dependency on currentUser
 
     // Import games from BGG and save/update to Firestore
     const importGames = useCallback(async (owner1BggUsername, owner2BggUsername) => {
@@ -1442,21 +1805,23 @@ const App = () => {
             return;
         }
         setLoading(true);
-        let totalAdded = 0;
-        let totalUpdated = 0;
+        setImportResults([]);
+        const results = [];
 
         try {
             // Function to process games for a single owner
             const processOwnerGames = async (username) => {
-                if (!username) return { added: 0, updated: 0 };
+                setImportStatus(`Fetching collection for ${username}…`);
+                const { games: importedGames, error } = await fetchBggCollection(username);
 
-                // console.log(`[ImportGames] Processing games for owner: ${username}`); // Removed for performance
-                const importedGames = await fetchBggCollection(username);
-
-                if (importedGames.length === 0) {
-                    // console.log(`[ImportGames] No games fetched for ${username}.`); // Removed for performance
-                    return { added: 0, updated: 0 };
+                if (error) {
+                    return { username, fetched: 0, added: 0, updated: 0, error };
                 }
+                if (importedGames.length === 0) {
+                    return { username, fetched: 0, added: 0, updated: 0, error: 'No games found in this collection' };
+                }
+
+                setImportStatus(`Saving ${importedGames.length} games for ${username}…`);
 
                 // Create a combined map of existing active and removed games for efficient lookup
                 // Key is now the unique collId
@@ -1510,38 +1875,40 @@ const App = () => {
                 });
 
                 await Promise.all(writePromises);
-                return { added: addedCount, updated: updatedCount };
+                return { username, fetched: importedGames.length, added: addedCount, updated: updatedCount, error: null };
             };
 
-            // Process owner 1's games first
-            if (owner1BggUsername) {
-                const result1 = await processOwnerGames(owner1BggUsername);
-                totalAdded += result1.added;
-                totalUpdated += result1.updated;
-                // console.log(`[ImportGames] Finished processing ${owner1BggUsername}. Added: ${result1.added}, Updated: ${result1.updated}.`); // Removed for performance
+            for (const username of [owner1BggUsername, owner2BggUsername]) {
+                if (username) {
+                    results.push(await processOwnerGames(username));
+                }
             }
 
-            // Then process owner 2's games
-            if (owner2BggUsername) {
-                const result2 = await processOwnerGames(owner2BggUsername);
-                totalAdded += result2.added;
-                totalUpdated += result2.updated;
-                // console.log(`[ImportGames] Finished processing ${owner2BggUsername}. Added: ${result2.added}, Updated: ${result2.updated}.`); // Removed for performance
-            }
+            setImportResults(results);
 
-            if (totalAdded === 0 && totalUpdated === 0) {
-                showMessage("No new games imported or updated. Please check usernames.", 'info');
+            const failures = results.filter(r => r.error);
+            const totalAdded = results.reduce((sum, r) => sum + r.added, 0);
+            const totalUpdated = results.reduce((sum, r) => sum + r.updated, 0);
+
+            if (failures.length > 0) {
+                showMessage(
+                    failures.map(f => `${f.username}: ${f.error}`).join('\n'),
+                    'error'
+                );
+            } else if (totalAdded === 0 && totalUpdated === 0) {
+                showToast('Import finished — everything was already up to date.');
             } else {
-                showMessage(`Import complete. Added ${totalAdded} new games. Updated ${totalUpdated} existing games.`, 'info');
+                showToast(`Import complete: ${totalAdded} added, ${totalUpdated} updated.`);
             }
 
         } catch (error) {
             console.error("[ImportGames] Error during import process:", error);
-            showMessage("Error importing games. Please try again.", 'error');
+            showMessage(`Error importing games: ${error.message}. Please try again.`, 'error');
         } finally {
+            setImportStatus('');
             setLoading(false);
         }
-    }, [db, currentUser, fetchBggCollection, showMessage, appId, games, removedGames]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [db, currentUser, fetchBggCollection, showMessage, showToast, appId, games, removedGames]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Listen for real-time updates to games and conventions
     useEffect(() => {
@@ -1645,7 +2012,7 @@ const App = () => {
                 ownerId: currentUser.uid, // Use currentUser.uid
             });
             // console.log(`[CreateConvention] Convention "${name}" created successfully!`, 'info'); // Removed for performance
-            showMessage(`Convention "${name}" created successfully!`, 'info');
+            showToast(`Convention "${name}" created.`);
         }
         catch (error) {
             console.error("[CreateConvention] Error creating convention:", error);
@@ -1653,7 +2020,7 @@ const App = () => {
         } finally {
             setLoading(false);
         }
-    }, [db, currentUser, showMessage, appId]);
+    }, [db, currentUser, showMessage, showToast, appId]);
 
     // Update an existing convention
     const updateConvention = useCallback(async (conventionId, name, startDate, endDate) => {
@@ -1681,7 +2048,7 @@ const App = () => {
                 endDate: new Date(endDate + 'T12:00:00').toISOString(),
             });
             // console.log(`[UpdateConvention] Convention "${name}" updated successfully!`, 'info'); // Removed for performance
-            showMessage(`Convention "${name}" updated successfully!`, 'info');
+            showToast(`Convention "${name}" updated.`);
             setEditingConvention(null); // Close the edit modal
         } catch (error) {
             console.error("[UpdateConvention] Error updating convention:", error);
@@ -1689,7 +2056,7 @@ const App = () => {
         } finally {
             setLoading(false);
         }
-    }, [db, currentUser, showMessage, appId]);
+    }, [db, currentUser, showMessage, showToast, appId]);
 
     // Delete a convention with double confirmation
     const deleteConvention = useCallback(async (conventionToDelete) => {
@@ -1714,7 +2081,7 @@ const App = () => {
                             await deleteDoc(conventionRef);
                             // The onSnapshot listener will handle updating 'conventions' state and deselecting currentConvention
                             // console.log(`[DeleteConvention] Convention "${conventionToDelete.name}" deleted from Firestore.`); // Removed for performance
-                            showMessage(`Convention "${conventionToDelete.name}" deleted successfully.`, 'info');
+                            showToast(`Convention "${conventionToDelete.name}" deleted.`);
                             // If the deleted convention was the currently selected one, deselect it.
                             if (currentConventionId === conventionToDelete.id) {
                                 setCurrentConventionId(null);
@@ -1729,7 +2096,7 @@ const App = () => {
                 );
             }
         );
-    }, [db, currentUser, showMessage, currentConventionId, appId]);
+    }, [db, currentUser, showMessage, showToast, currentConventionId, appId]);
 
     // Add/Remove game from current convention
     const toggleGameForConvention = useCallback(async (game, conventionId) => { // Now accepts conventionId
@@ -1742,7 +2109,7 @@ const App = () => {
         
         // NEW: Check if conventionId is missing and show specific message
         if (!conventionId) {
-            showMessage("Please select a Convention first from the \"All Conventions\" area.", 'info');
+            showMessage("Please select a convention first — use the convention chip in the top bar.", 'info');
             return;
         }
 
@@ -1807,10 +2174,7 @@ const App = () => {
                 const conventionRef = doc(db, `artifacts/${appId}/public/data/conventions`, conventionId);
                 await updateDoc(conventionRef, { games: updatedGames });
                 // console.log("[ToggleGameForConvention] Convention document updated in Firestore."); // Removed for performance
-                // Removed showMessage for adding a game to a convention
-                if (isGameInConvention) { // Only show message if removing
-                    showMessage(successMessage, 'info');
-                }
+                showToast(successMessage);
             } catch (error) {
                 console.error("[ToggleGameForConvention] Error toggling game for convention:", error);
                 showMessage("Error updating convention games. Please try again.", 'error');
@@ -1835,7 +2199,7 @@ const App = () => {
             performUpdate();
         }
 
-    }, [db, currentUser, showMessage, closeMessage, appId, conventions, games, focusSearchInput]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [db, currentUser, showMessage, showToast, closeMessage, appId, conventions, games, focusSearchInput]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Toggle checkout for a game specifically within a convention
     const toggleGameConventionCheckout = useCallback(async (gameInConvention, conventionId) => {
@@ -1969,7 +2333,7 @@ const App = () => {
                 link.click();
                 document.body.removeChild(link);
                 // console.log("[ExportCSV] CSV download initiated."); // Removed for performance
-                showMessage("CSV exported successfully!", 'info');
+                showToast("CSV exported.");
             } else {
                 console.warn("[ExportCSV] Browser does not support direct download.");
                 showMessage("Your browser does not support downloading files directly. Please copy the content manually.", 'error');
@@ -1980,7 +2344,7 @@ const App = () => {
         } finally {
             setLoading(false);
         }
-    }, [db, currentConvention, showMessage, appId, games, removedGames, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [db, currentConvention, showMessage, showToast, appId, games, removedGames, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Remove game from overall library (soft delete)
     const removeGameFromLibrary = useCallback(async (gameToRemove) => {
@@ -1996,7 +2360,7 @@ const App = () => {
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, gameToRemove.id);
             await updateDoc(gameRef, { isRemoved: true });
 
-            showMessage(`"${gameToRemove.name} (${gameToRemove.ownerName})" has been moved to "Removed Games". Its historical records are preserved.`, 'info');
+            showToast(`"${gameToRemove.name}" moved to Removed games. Its history is preserved.`);
         } catch (error) {
             console.error("[RemoveGame] Error removing game from library:", error);
             showMessage("Error removing game from library. Please try again.", 'error');
@@ -2004,7 +2368,7 @@ const App = () => {
             setLoading(false);
             focusSearchInput(); // Focus search input after operation
         }
-    }, [db, currentUser, showMessage, appId, focusSearchInput]);
+    }, [db, currentUser, showMessage, showToast, appId, focusSearchInput]);
 
     // Re-add game to overall library (undo soft delete)
     const reAddGameToLibrary = useCallback(async (gameToReAdd) => {
@@ -2019,7 +2383,7 @@ const App = () => {
             const gameRef = doc(db, `artifacts/${appId}/public/data/games`, gameToReAdd.id);
             await updateDoc(gameRef, { isRemoved: false });
 
-            showMessage(`"${gameToReAdd.name} (${gameToReAdd.ownerName})" has been re-added to the main library.`, 'info');
+            showToast(`"${gameToReAdd.name}" re-added to the library.`);
         } catch (error) {
             console.error("Error re-adding game to library:", error);
             showMessage("Error re-adding game to library. Please try again.", 'error');
@@ -2027,7 +2391,7 @@ const App = () => {
             setLoading(false);
             focusSearchInput(); // Focus search input after operation
         }
-    }, [db, currentUser, showMessage, appId, focusSearchInput]);
+    }, [db, currentUser, showMessage, showToast, appId, focusSearchInput]);
 
     // Function to add a custom game to the library
     const addCustomGameToLibrary = useCallback(async (gameData) => {
@@ -2053,7 +2417,7 @@ const App = () => {
                 isRemoved: false,
                 isCustom: true, // Mark as custom entry
             });
-            showMessage(`"${gameData.name}" added to your library!`, 'info');
+            showToast(`"${gameData.name}" added to the library.`);
             setAddingCustomGame(false); // Close the modal
         } catch (error) {
             console.error("[AddCustomGame] Error adding custom game:", error);
@@ -2062,145 +2426,102 @@ const App = () => {
             setLoading(false);
             focusSearchInput(); // Focus search input after operation
         }
-    }, [db, currentUser, showMessage, appId, focusSearchInput]);
+    }, [db, currentUser, showMessage, showToast, appId, focusSearchInput]);
 
-    // Function to clear all games data (conventions are not deleted)
-    const clearAllData = useCallback(async () => {
+    // Delete every game document (conventions are kept).
+    // Confirmation happens in the Settings page's type-to-confirm modal.
+    const performClearAllData = useCallback(async () => {
         if (!db || !currentUser) { // Check currentUser
             console.warn("[ClearAllData] Firebase not initialized or currentUser missing.");
             showMessage("Please log in to clear data.", 'error');
             return;
         }
+        setLoading(true);
+        try {
+            // Delete all games
+            const gamesCollectionRef = collection(db, `artifacts/${appId}/public/data/games`);
+            const gamesSnapshot = await getDocs(gamesCollectionRef);
+            const gameDeletePromises = gamesSnapshot.docs.map(doc => deleteDoc(doc.ref));
+            await Promise.all(gameDeletePromises);
 
-        const confirmStep3 = async () => {
-            setLoading(true);
-            try {
-                // Delete all games
-                const gamesCollectionRef = collection(db, `artifacts/${appId}/public/data/games`);
-                const gamesSnapshot = await getDocs(gamesCollectionRef);
-                const gameDeletePromises = gamesSnapshot.docs.map(doc => deleteDoc(doc.ref));
-                await Promise.all(gameDeletePromises);
-                // console.log("[ClearAllData] All games deleted."); // Removed for performance
+            // Conventions are NOT deleted as per user request
+            showToast("All game and checkout data has been cleared permanently.");
+            setCurrentConventionId(null); // Deselect any active convention
+        } catch (error) {
+            console.error("[ClearAllData] Error clearing all data:", error);
+            showMessage("Error clearing all data. Please try again.", 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, [db, currentUser, showMessage, showToast, appId, setCurrentConventionId]);
 
-                // Conventions are NOT deleted as per user request
-                showMessage("All game and checkout data has been cleared permanently.", 'info');
-                setCurrentConventionId(null); // Deselect any active convention
-            } catch (error) {
-                console.error("[ClearAllData] Error clearing all data:", error);
-                showMessage("Error clearing all data. Please try again.", 'error');
-            } finally {
-                setLoading(false);
-                focusSearchInput(); // Focus search input after operation
-            }
-        };
-
-        const confirmStep2 = () => {
-            showMessage(
-                "This will PERMANENTLY delete ALL game and checkout data. This action is irreversible. Are you absolutely sure?",
-                'confirm',
-                confirmStep3
-            );
-        };
-
-        const confirmStep1 = () => {
-            showMessage(
-                "WARNING: Clearing all data will remove every game and its checkout records from your library. Proceed with caution.",
-                'confirm',
-                confirmStep2
-            );
-        };
-
-        confirmStep1();
-    }, [db, currentUser, showMessage, appId, setCurrentConventionId, focusSearchInput]);
-
-    // NEW FUNCTION: Clear all checkout data (overall and convention-specific)
-    const clearAllCheckoutData = useCallback(async () => {
+    // Reset all checkout data (overall and convention-specific).
+    // Confirmation happens in the Settings page's type-to-confirm modal.
+    const performClearAllCheckoutData = useCallback(async () => {
         if (!db || !currentUser) {
             console.warn("[ClearAllCheckoutData] Firebase not initialized or currentUser missing.");
             showMessage("Please log in to clear checkout data.", 'error');
             return;
         }
-
-        const confirmStep3 = async () => {
-            setLoading(true);
-            try {
-                // 1. Reset checkout data for all games in the main 'games' collection
-                const gamesCollectionRef = collection(db, `artifacts/${appId}/public/data/games`);
-                const gamesSnapshot = await getDocs(gamesCollectionRef);
-                const gameUpdatePromises = gamesSnapshot.docs.map(async (docSnapshot) => {
-                    const gameData = docSnapshot.data();
-                    if (gameData.checkoutCount > 0 || gameData.isCheckedOut || gameData.lastCheckedOutBy || gameData.lastCheckedOutDate || gameData.lastCheckedInDate) {
-                        return updateDoc(doc(gamesCollectionRef, docSnapshot.id), {
-                            checkoutCount: 0,
-                            isCheckedOut: false,
-                            lastCheckedOutBy: '',
-                            lastCheckedOutDate: null,
-                            lastCheckedInDate: null,
-                        });
-                    }
-                    return Promise.resolve(); // No update needed if already reset
-                });
-                await Promise.all(gameUpdatePromises);
-                console.log("[ClearAllCheckoutData] All main game checkout data reset.");
-
-                // 2. Reset convention-specific checkout data for all games within all conventions
-                const conventionsCollectionRef = collection(db, `artifacts/${appId}/public/data/conventions`);
-                const conventionsSnapshot = await getDocs(conventionsCollectionRef);
-                const conventionUpdatePromises = conventionsSnapshot.docs.map(async (convDocSnapshot) => {
-                    const convData = convDocSnapshot.data();
-                    const currentConvGames = convData.games || [];
-                    let needsConvUpdate = false;
-                    const updatedConvGames = currentConvGames.map(convGame => {
-                        if (convGame.conventionCheckoutCount > 0 || convGame.isCheckedOutAtConvention || (Array.isArray(convGame.conventionCheckoutTimes) && convGame.conventionCheckoutTimes.length > 0)) {
-                            needsConvUpdate = true;
-                            return {
-                                ...convGame,
-                                conventionCheckoutCount: 0,
-                                isCheckedOutAtConvention: false,
-                                conventionCheckoutTimes: [],
-                            };
-                        }
-                        return convGame;
+        setLoading(true);
+        try {
+            // 1. Reset checkout data for all games in the main 'games' collection
+            const gamesCollectionRef = collection(db, `artifacts/${appId}/public/data/games`);
+            const gamesSnapshot = await getDocs(gamesCollectionRef);
+            const gameUpdatePromises = gamesSnapshot.docs.map(async (docSnapshot) => {
+                const gameData = docSnapshot.data();
+                if (gameData.checkoutCount > 0 || gameData.isCheckedOut || gameData.lastCheckedOutBy || gameData.lastCheckedOutDate || gameData.lastCheckedInDate) {
+                    return updateDoc(doc(gamesCollectionRef, docSnapshot.id), {
+                        checkoutCount: 0,
+                        isCheckedOut: false,
+                        lastCheckedOutBy: '',
+                        lastCheckedOutDate: null,
+                        lastCheckedInDate: null,
                     });
+                }
+                return Promise.resolve(); // No update needed if already reset
+            });
+            await Promise.all(gameUpdatePromises);
+            console.log("[ClearAllCheckoutData] All main game checkout data reset.");
 
-                    if (needsConvUpdate) {
-                        return updateDoc(doc(conventionsCollectionRef, convDocSnapshot.id), {
-                            games: updatedConvGames,
-                        });
+            // 2. Reset convention-specific checkout data for all games within all conventions
+            const conventionsCollectionRef = collection(db, `artifacts/${appId}/public/data/conventions`);
+            const conventionsSnapshot = await getDocs(conventionsCollectionRef);
+            const conventionUpdatePromises = conventionsSnapshot.docs.map(async (convDocSnapshot) => {
+                const convData = convDocSnapshot.data();
+                const currentConvGames = convData.games || [];
+                let needsConvUpdate = false;
+                const updatedConvGames = currentConvGames.map(convGame => {
+                    if (convGame.conventionCheckoutCount > 0 || convGame.isCheckedOutAtConvention || (Array.isArray(convGame.conventionCheckoutTimes) && convGame.conventionCheckoutTimes.length > 0)) {
+                        needsConvUpdate = true;
+                        return {
+                            ...convGame,
+                            conventionCheckoutCount: 0,
+                            isCheckedOutAtConvention: false,
+                            conventionCheckoutTimes: [],
+                        };
                     }
-                    return Promise.resolve(); // No update needed for this convention
+                    return convGame;
                 });
-                await Promise.all(conventionUpdatePromises);
-                console.log("[ClearAllCheckoutData] All convention checkout data reset.");
 
-                showMessage("All checkout data has been cleared successfully!", 'info');
-            } catch (error) {
-                console.error("[ClearAllCheckoutData] Error clearing checkout data:", error);
-                showMessage("Error clearing checkout data. Please try again.", 'error');
-            } finally {
-                setLoading(false);
-                focusSearchInput(); // Focus search input after operation
-            }
-        };
+                if (needsConvUpdate) {
+                    return updateDoc(doc(conventionsCollectionRef, convDocSnapshot.id), {
+                        games: updatedConvGames,
+                    });
+                }
+                return Promise.resolve(); // No update needed for this convention
+            });
+            await Promise.all(conventionUpdatePromises);
+            console.log("[ClearAllCheckoutData] All convention checkout data reset.");
 
-        const confirmStep2 = () => {
-            showMessage(
-                "This will reset ALL game and convention checkout counts to zero. This action is irreversible for checkout data. Are you absolutely sure?",
-                'confirm',
-                confirmStep3
-            );
-        };
-
-        const confirmStep1 = () => {
-            showMessage(
-                "WARNING: Clearing all checkout data will remove all checkout records from your library. Proceed with caution.",
-                'confirm',
-                confirmStep2
-            );
-        };
-
-        confirmStep1();
-    }, [db, currentUser, showMessage, appId, focusSearchInput]);
+            showToast("All checkout data has been reset.");
+        } catch (error) {
+            console.error("[ClearAllCheckoutData] Error clearing checkout data:", error);
+            showMessage("Error clearing checkout data. Please try again.", 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, [db, currentUser, showMessage, showToast, appId]);
 
 
     return (
@@ -2212,10 +2533,6 @@ const App = () => {
                     margin: 0;
                     padding: 0;
                     overflow: auto;
-                }
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-                body {
-                    font-family: 'Inter', sans-serif;
                 }
                 .scrollable-list {
                     max-height: 400px;
@@ -2229,10 +2546,17 @@ const App = () => {
                 `}
             </style>
 
-            <AppTopbar currentUser={currentUser} logout={logout} />
+            <AppTopbar
+                currentUser={currentUser}
+                logout={logout}
+                conventions={conventions}
+                currentConvention={currentConvention}
+                setCurrentConventionId={setCurrentConventionId}
+                goToConventions={() => setCurrentPage('allConventions')}
+            />
 
-            {/* Loading overlay for general app operations */}
-            {loading && (
+            {/* Loading overlay for general app operations (imports show inline progress instead) */}
+            {loading && !importStatus && (
                 <div className="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50">
                     <div className="animate-spin rounded-full h-20 w-20 border-t-4 border-b-4 border-blue-400"></div>
                     <p className="ml-4 text-xl text-blue-300">Loading...</p>
@@ -2240,6 +2564,7 @@ const App = () => {
             )}
 
             <MessageBox message={message} type={messageType} onClose={closeMessage} onConfirm={confirmAction} />
+            <ToastStack toasts={toasts} />
 
             {/* Conditional rendering based on authentication state */}
             {loadingAuth ? (
@@ -2255,58 +2580,57 @@ const App = () => {
                 />
             ) : (
                 <main className="dfwgv-library-main">
-                    {/* Navigation Buttons */}
-                    <div className="dfwgv-library-nav mb-8 w-full">
-                        {/* Primary Navigation Row */}
-                        <div className="dfwgv-primary-nav flex flex-wrap justify-center gap-4 w-full">
-                            <button
-                                onClick={() => setCurrentPage('home')}
-                                className={`px-6 py-3 rounded-lg text-lg font-semibold transition duration-300 ease-in-out shadow-md
-                                    ${currentPage === 'home' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100 hover:bg-gray-600'}`}
-                            >
-                                Home ({currentConvention ? currentConvention.name : 'No Convention Selected'})
-                            </button>
-                            <button
-                                onClick={() => setCurrentPage('checkedOutGames')}
-                                className={`px-6 py-3 rounded-lg text-lg font-semibold transition duration-300 ease-in-out shadow-md
-                                    ${currentPage === 'checkedOutGames' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100 hover:bg-gray-600'}`}
-                            >
-                                Checked Out Games ({currentConvention ? currentConvention.games.filter(g => g.isCheckedOutAtConvention).length : 0})
-                            </button>
-                        </div>
-
-                        {/* Secondary/Utility Navigation Column - Aligned top-right */}
-                        <div className="dfwgv-utility-nav flex flex-col items-stretch gap-2 w-full">
-                            <button
-                                onClick={() => setCurrentPage('import')}
-                                className={`px-4 py-2 rounded-lg text-sm font-semibold transition duration-300 ease-in-out shadow-md
-                                    ${currentPage === 'import' ? 'bg-green-700 text-white' : 'bg-green-600 text-white hover:bg-green-700'}`}
-                            >
-                                Import Collections
-                            </button>
-                            <button
-                                onClick={() => setCurrentPage('library')}
-                                className={`px-4 py-2 rounded-lg text-sm font-semibold transition duration-300 ease-in-out shadow-md
-                                    ${currentPage === 'library' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100 hover:bg-gray-600'}`}
-                            >
-                                Combined Game Library
-                            </button>
-                            <button
-                                onClick={() => setCurrentPage('allConventions')}
-                                className={`px-4 py-2 rounded-lg text-sm font-semibold transition duration-300 ease-in-out shadow-md
-                                    ${currentPage === 'allConventions' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100 hover:bg-gray-600'}`}
-                            >
-                                All Conventions ({conventions.length})
-                            </button>
-                            <button
-                                onClick={() => setCurrentPage('removed')}
-                                className={`px-4 py-2 rounded-lg text-sm font-semibold transition duration-300 ease-in-out shadow-md
-                                    ${currentPage === 'removed' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100 hover:bg-gray-600'}`}
-                            >
-                                Games Removed From Library ({removedGames.length})
-                            </button>
-                        </div>
-                    </div>
+                    {/* Single tab bar: every page is one click away, counts give live context */}
+                    <nav className="dfwgv-tabs" aria-label="Library manager pages">
+                        <button
+                            onClick={() => setCurrentPage('home')}
+                            className={`dfwgv-tab ${currentPage === 'home' ? 'active' : ''}`}
+                        >
+                            Home
+                        </button>
+                        <button
+                            onClick={() => setCurrentPage('checkedOutGames')}
+                            className={`dfwgv-tab ${currentPage === 'checkedOutGames' ? 'active' : ''}`}
+                        >
+                            Checked Out
+                            <span className="dfwgv-tab-count">{currentConvention ? currentConvention.games.filter(g => g.isCheckedOutAtConvention).length : 0}</span>
+                        </button>
+                        <button
+                            onClick={() => setCurrentPage('library')}
+                            className={`dfwgv-tab ${currentPage === 'library' ? 'active' : ''}`}
+                        >
+                            Library
+                            <span className="dfwgv-tab-count">{games.length}</span>
+                        </button>
+                        <button
+                            onClick={() => setCurrentPage('allConventions')}
+                            className={`dfwgv-tab ${currentPage === 'allConventions' ? 'active' : ''}`}
+                        >
+                            Conventions
+                            <span className="dfwgv-tab-count">{conventions.length}</span>
+                        </button>
+                        <button
+                            onClick={() => setCurrentPage('import')}
+                            className={`dfwgv-tab ${currentPage === 'import' ? 'active' : ''}`}
+                        >
+                            Import
+                        </button>
+                        <button
+                            onClick={() => setCurrentPage('removed')}
+                            className={`dfwgv-tab ${currentPage === 'removed' ? 'active' : ''}`}
+                        >
+                            Removed
+                            <span className="dfwgv-tab-count">{removedGames.length}</span>
+                        </button>
+                        <span className="dfwgv-tab-spacer"></span>
+                        <button
+                            onClick={() => setCurrentPage('settings')}
+                            className={`dfwgv-tab ${currentPage === 'settings' ? 'active' : ''}`}
+                            title="Settings and danger zone"
+                        >
+                            ⚙ Settings
+                        </button>
+                    </nav>
 
                     {/* Conditional Rendering of Pages */}
                     <div className="pt-6 sm:pt-8 w-full flex justify-center">
@@ -2325,6 +2649,7 @@ const App = () => {
                                 homeSearchTerm={homeSearchTerm} // Pass state value
                                 setHomeSearchTerm={setHomeSearchTerm} // Pass state setter
                                 gamesByIdMap={gamesByIdMap} // Pass gamesByIdMap
+                                goToConventions={() => setCurrentPage('allConventions')}
                             />
                         )}
 
@@ -2333,6 +2658,8 @@ const App = () => {
                                 importGames={importGames}
                                 loading={loading}
                                 showMessage={showMessage}
+                                importStatus={importStatus}
+                                importResults={importResults}
                             />
                         )}
 
@@ -2344,13 +2671,19 @@ const App = () => {
                                 loading={loading}
                                 showMessage={showMessage}
                                 removeGameFromLibrary={removeGameFromLibrary}
-                                clearAllData={clearAllData} // Pass clearAllData function
                                 onAddCustomGame={() => setAddingCustomGame(true)} // New prop to open modal
                                 librarySearchInputRef={librarySearchInputRef} // Pass ref
                                 searchTerm={searchTerm} // Pass state value
                                 setSearchTerm={setSearchTerm} // Pass state setter
-                                clearAllCheckoutData={clearAllCheckoutData} // Pass new function
                                 gamesByIdMap={gamesByIdMap} // Pass gamesByIdMap
+                            />
+                        )}
+
+                        {currentPage === 'settings' && (
+                            <SettingsPage
+                                performClearAllCheckoutData={performClearAllCheckoutData}
+                                performClearAllData={performClearAllData}
+                                loading={loading}
                             />
                         )}
 
