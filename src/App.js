@@ -2821,6 +2821,29 @@ const PublicConventionPage = ({ conventionId }) => {
 
     const checkedOutCount = useMemo(() => allGames.filter(g => g.isCheckedOutAtConvention).length, [allGames]);
 
+    // Re-render every minute so "out for X min" stays current between snapshots
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 60000);
+        return () => clearInterval(timer);
+    }, []);
+
+    // How long the current checkout has been running; the last entry in
+    // conventionCheckoutTimes is when the active checkout started.
+    const checkoutDuration = (game) => {
+        if (!game.isCheckedOutAtConvention) return null;
+        const times = Array.isArray(game.conventionCheckoutTimes) ? game.conventionCheckoutTimes : [];
+        if (times.length === 0) return null;
+        const start = new Date(times[times.length - 1]).getTime();
+        if (Number.isNaN(start) || start > now) return null;
+        const mins = Math.floor((now - start) / 60000);
+        if (mins < 1) return 'just now';
+        if (mins < 60) return `${mins} min`;
+        const hours = Math.floor(mins / 60);
+        const rest = mins % 60;
+        return rest ? `${hours} hr ${rest} min` : `${hours} hr`;
+    };
+
     return (
         <div className="dfwgv-library-app min-h-screen flex flex-col">
             <header className="dfwgv-topbar">
@@ -2899,20 +2922,26 @@ const PublicConventionPage = ({ conventionId }) => {
                             <p className="text-gray-400 text-center">No games match.</p>
                         ) : (
                             <ul className="dfwgv-public-list">
-                                {visibleGames.map(game => (
-                                    <GameRow
-                                        key={game.id}
-                                        game={{ ...game, ownerName: '' }}
-                                        metaItems={[
-                                            `👥 ${game.minPlayers || '?'}–${game.maxPlayers || '?'}`,
-                                            `⏱ ${game.playingTime || '?'} min`,
-                                            <><span className="star">★</span> {(typeof game.averageRating === 'number') ? game.averageRating.toFixed(1) : 'N/A'}</>,
-                                        ]}
-                                        pill={game.isCheckedOutAtConvention
-                                            ? { label: 'Checked out', tone: 'out' }
-                                            : { label: 'Available', tone: 'ok' }}
-                                    />
-                                ))}
+                                {visibleGames.map(game => {
+                                    const duration = checkoutDuration(game);
+                                    const outLabel = duration === 'just now'
+                                        ? 'Checked out just now'
+                                        : duration ? `Checked out · ${duration}` : 'Checked out';
+                                    return (
+                                        <GameRow
+                                            key={game.id}
+                                            game={{ ...game, ownerName: '' }}
+                                            metaItems={[
+                                                `👥 ${game.minPlayers || '?'}–${game.maxPlayers || '?'}`,
+                                                `⏱ ${game.playingTime || '?'} min`,
+                                                <><span className="star">★</span> {(typeof game.averageRating === 'number') ? game.averageRating.toFixed(1) : 'N/A'}</>,
+                                            ]}
+                                            pill={game.isCheckedOutAtConvention
+                                                ? { label: outLabel, tone: 'out' }
+                                                : { label: 'Available', tone: 'ok' }}
+                                        />
+                                    );
+                                })}
                             </ul>
                         )}
 
