@@ -479,7 +479,7 @@ const HomeView = memo(({
     loading,
     currentConvention,
     exportConventionGamesToCsv, toggleGameForConvention, toggleGameConventionCheckout, showMessage, setCurrentConventionId,
-    homeSearchInputRef, homeSearchTerm, setHomeSearchTerm, gamesByIdMap, conventions, goToConventions
+    homeSearchInputRef, homeSearchTerm, setHomeSearchTerm, gamesByIdMap, conventions, goToConventions, copyPublicLink
 }) => {
     const debouncedHomeSearchTerm = useDebounce(homeSearchTerm, 300); // Debounce search input
     const [showTopCheckouts, setShowTopCheckouts] = useState(false);
@@ -746,6 +746,13 @@ const HomeView = memo(({
                                 disabled={loading || gamesInCurrentConventionFilteredBySearch.length === 0}
                             >
                                 Export CSV
+                            </button>
+                            <button
+                                onClick={() => copyPublicLink(currentConvention)}
+                                className="dfwgv-btn dfwgv-btn-secondary"
+                                title="Copy a read-only link that shows this convention's games and live availability"
+                            >
+                                🔗 Public link
                             </button>
                         </div>
 
@@ -1370,7 +1377,7 @@ const EditConventionModal = memo(({ convention, onClose, onSave, loading, showMe
 // New All Conventions Page Component
 const AllConventionsPage = memo(({
     conventions, currentConvention, createConvention, deleteConvention, updateConvention,
-    loading, showMessage, setCurrentConventionId, setEditingConvention
+    loading, showMessage, setCurrentConventionId, setEditingConvention, copyPublicLink
 }) => {
     const [newConventionName, setNewConventionName] = useState('');
     const [newConventionStartDate, setNewConventionStartDate] = useState('');
@@ -1475,6 +1482,13 @@ const AllConventionsPage = memo(({
                                             className={`dfwgv-btn ${isSelected ? 'dfwgv-btn-secondary' : 'dfwgv-btn-primary'}`}
                                         >
                                             {isSelected ? 'Deselect' : 'Select'}
+                                        </button>
+                                        <button
+                                            onClick={() => copyPublicLink(conv)}
+                                            className="dfwgv-btn dfwgv-btn-secondary"
+                                            title="Copy a read-only link that shows this convention's games and live availability"
+                                        >
+                                            🔗 Public link
                                         </button>
                                         <button
                                             onClick={() => setEditingConvention(conv)}
@@ -1706,6 +1720,19 @@ const App = () => {
     // Import progress + per-username results, surfaced on the Import page
     const [importStatus, setImportStatus] = useState('');
     const [importResults, setImportResults] = useState([]);
+
+    // Copy a convention's public read-only link (?con=<id>) to the clipboard
+    const copyPublicLink = useCallback(async (conv) => {
+        if (!conv) return;
+        const url = `${window.location.origin}${window.location.pathname}?con=${conv.id}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            showToast(`Public link for "${conv.name}" copied.`);
+        } catch (error) {
+            // Clipboard access can be blocked; fall back to showing the link for manual copy
+            showMessage(`Public link for "${conv.name}": ${url}`, 'info');
+        }
+    }, [showToast, showMessage]);
 
     // Function to focus the appropriate search input based on the current page and clear its value
     const focusSearchInput = useCallback(() => {
@@ -2650,6 +2677,7 @@ const App = () => {
                                 setHomeSearchTerm={setHomeSearchTerm} // Pass state setter
                                 gamesByIdMap={gamesByIdMap} // Pass gamesByIdMap
                                 goToConventions={() => setCurrentPage('allConventions')}
+                                copyPublicLink={copyPublicLink}
                             />
                         )}
 
@@ -2707,6 +2735,7 @@ const App = () => {
                                 showMessage={showMessage}
                                 setCurrentConventionId={setCurrentConventionId}
                                 setEditingConvention={setEditingConvention}
+                                copyPublicLink={copyPublicLink}
                             />
                         )}
 
@@ -2748,12 +2777,168 @@ const App = () => {
     );
 };
 
+// Public, read-only live view of one convention, reached via ?con=<conventionId>.
+// No auth: Firestore rules allow anonymous `get` of a single convention document,
+// and the onSnapshot listener keeps the page updated in real time.
+const PublicConventionPage = ({ conventionId }) => {
+    const { db, appId } = useContext(FirebaseContext);
+    const [convention, setConvention] = useState(null);
+    const [status, setStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
+    const [search, setSearch] = useState('');
+    const [filter, setFilter] = useState('all'); // 'all' | 'available' | 'out'
+    const debouncedSearch = useDebounce(search, 200);
+
+    useEffect(() => {
+        if (!db || !conventionId) return;
+        const conventionRef = doc(db, `artifacts/${appId}/public/data/conventions`, conventionId);
+        const unsubscribe = onSnapshot(conventionRef, (snapshot) => {
+            if (snapshot.exists()) {
+                setConvention({ id: snapshot.id, ...snapshot.data() });
+                setStatus('ready');
+            } else {
+                setStatus('error');
+            }
+        }, (error) => {
+            console.error('[PublicConvention] Failed to load convention:', error);
+            setStatus('error');
+        });
+        return () => unsubscribe();
+    }, [db, appId, conventionId]);
+
+    const allGames = useMemo(() => (convention?.games || []).filter(g => g && g.name), [convention?.games]);
+
+    const visibleGames = useMemo(() => {
+        const query = String(debouncedSearch).toLowerCase();
+        return allGames
+            .filter(g => String(g.name).toLowerCase().includes(query))
+            .filter(g => {
+                if (filter === 'available') return !g.isCheckedOutAtConvention;
+                if (filter === 'out') return !!g.isCheckedOutAtConvention;
+                return true;
+            })
+            .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    }, [allGames, debouncedSearch, filter]);
+
+    const checkedOutCount = useMemo(() => allGames.filter(g => g.isCheckedOutAtConvention).length, [allGames]);
+
+    return (
+        <div className="dfwgv-library-app min-h-screen flex flex-col">
+            <header className="dfwgv-topbar">
+                <div className="dfwgv-brand">
+                    <a className="dfwgv-logo" href="https://www.dfwgamingvillage.com/" aria-label="Go to DFW Gaming Village home">
+                        <img src={`${process.env.PUBLIC_URL}/dfwgv-icon.png`} alt="DFW Gaming Village logo" />
+                    </a>
+                    <div className="dfwgv-brandText">
+                        <div className="dfwgv-title">DFWGV Game Library</div>
+                        <div className="dfwgv-subtitle">{convention ? convention.name : 'Convention library'}</div>
+                    </div>
+                </div>
+                <span className="dfwgv-live-badge"><span className="dfwgv-live-dot" aria-hidden="true"></span> Live</span>
+            </header>
+
+            <main className="dfwgv-public-main">
+                {status === 'loading' && (
+                    <p className="text-gray-300 text-center">Loading the game library…</p>
+                )}
+
+                {status === 'error' && (
+                    <section className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+                        <div className="dfwgv-empty">
+                            <h3>This library isn't available</h3>
+                            <p>The link may be wrong, or this convention is no longer shared. Ask the library team for a fresh link.</p>
+                        </div>
+                    </section>
+                )}
+
+                {status === 'ready' && convention && (
+                    <>
+                        <section className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+                            <h1 className="text-2xl font-semibold text-gray-100 m-0">{convention.name}</h1>
+                            <p className="text-gray-300 mt-1 mb-4 text-sm">
+                                {new Date(convention.startDate).toLocaleDateString()} – {new Date(convention.endDate).toLocaleDateString()}
+                            </p>
+                            <div className="dfwgv-stat-row">
+                                <div className="dfwgv-stat">
+                                    <div className="k">Games in library</div>
+                                    <div className="v">{allGames.length}</div>
+                                </div>
+                                <div className="dfwgv-stat">
+                                    <div className="k">Available now</div>
+                                    <div className="v">{allGames.length - checkedOutCount}</div>
+                                </div>
+                                <div className="dfwgv-stat">
+                                    <div className="k">Checked out</div>
+                                    <div className="v">{checkedOutCount}</div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                            <input
+                                type="text"
+                                placeholder={`Search ${allGames.length} games…`}
+                                className="flex-grow p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400"
+                                style={{ flexBasis: '200px' }}
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                aria-label="Search games"
+                            />
+                            <select
+                                className="p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100"
+                                value={filter}
+                                onChange={(e) => setFilter(e.target.value)}
+                                aria-label="Filter by availability"
+                            >
+                                <option value="all">All games</option>
+                                <option value="available">Available now</option>
+                                <option value="out">Checked out</option>
+                            </select>
+                        </div>
+
+                        {visibleGames.length === 0 ? (
+                            <p className="text-gray-400 text-center">No games match.</p>
+                        ) : (
+                            <ul className="dfwgv-public-list">
+                                {visibleGames.map(game => (
+                                    <GameRow
+                                        key={game.id}
+                                        game={{ ...game, ownerName: '' }}
+                                        metaItems={[
+                                            `👥 ${game.minPlayers || '?'}–${game.maxPlayers || '?'}`,
+                                            `⏱ ${game.playingTime || '?'} min`,
+                                            <><span className="star">★</span> {(typeof game.averageRating === 'number') ? game.averageRating.toFixed(1) : 'N/A'}</>,
+                                        ]}
+                                        pill={game.isCheckedOutAtConvention
+                                            ? { label: 'Checked out', tone: 'out' }
+                                            : { label: 'Available', tone: 'ok' }}
+                                    />
+                                ))}
+                            </ul>
+                        )}
+
+                        <div className="dfwgv-public-footer">
+                            Availability updates automatically · <a href="https://www.dfwgamingvillage.com/">DFW Gaming Village</a>
+                        </div>
+                    </>
+                )}
+            </main>
+        </div>
+    );
+};
+
+// A ?con=<conventionId> URL serves the public read-only view; everything else gets the full app.
+const publicConventionId = new URLSearchParams(window.location.search).get('con');
+
 // Root component now wraps with FirebaseSetup and AuthProvider
 const Root = () => (
     <FirebaseSetup>
-        <AuthProvider>
-            <App />
-        </AuthProvider>
+        {publicConventionId ? (
+            <PublicConventionPage conventionId={publicConventionId} />
+        ) : (
+            <AuthProvider>
+                <App />
+            </AuthProvider>
+        )}
     </FirebaseSetup>
 );
 
