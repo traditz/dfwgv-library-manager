@@ -3037,6 +3037,7 @@ const PublicConventionPage = ({ conventionId }) => {
     const [status, setStatus] = useState('loading'); // 'loading' | 'ready' | 'error'
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('all'); // 'all' | 'available' | 'out'
+    const [view, setView] = useState('library'); // 'library' | 'tables' (tabs appear when a Planner event is linked)
     const debouncedSearch = useDebounce(search, 200);
 
     useEffect(() => {
@@ -3141,14 +3142,14 @@ const PublicConventionPage = ({ conventionId }) => {
 
     return (
         <div className="dfwgv-library-app min-h-screen flex flex-col">
-            <header className="dfwgv-topbar">
+            <header className="dfwgv-topbar dfwgv-public-topbar">
                 <div className="dfwgv-brand">
                     <a className="dfwgv-logo" href="https://www.dfwgamingvillage.com/" aria-label="Go to DFW Gaming Village home">
                         <img src={`${process.env.PUBLIC_URL}/dfwgv-icon.png`} alt="DFW Gaming Village logo" />
                     </a>
                     <div className="dfwgv-brandText">
-                        <div className="dfwgv-title">DFWGV Game Library</div>
-                        <div className="dfwgv-subtitle">{convention ? convention.name : 'Convention library'}</div>
+                        <div className="dfwgv-title">DFW Gaming Village</div>
+                        <div className="dfwgv-subtitle">Convention game library</div>
                     </div>
                 </div>
                 <span className="dfwgv-live-badge"><span className="dfwgv-live-dot" aria-hidden="true"></span> Live</span>
@@ -3170,46 +3171,62 @@ const PublicConventionPage = ({ conventionId }) => {
 
                 {status === 'ready' && convention && (
                     <>
-                        <section className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                            <h1 className="text-2xl font-semibold text-gray-100 m-0">{convention.name}</h1>
-                            <p className="text-gray-300 mt-1 mb-4 text-sm">
-                                {new Date(convention.startDate).toLocaleDateString()} – {new Date(convention.endDate).toLocaleDateString()}
+                        <section className="dfwgv-public-hero bg-gray-800 rounded-xl border border-gray-700">
+                            <p className="eyebrow">DFW Gaming Village presents</p>
+                            <h1>{convention.name}</h1>
+                            <p className="when">
+                                📅 {new Date(convention.startDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                {' – '}
+                                {new Date(convention.endDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                {convention.plannerEvent?.location ? ` · 📍 ${convention.plannerEvent.location}` : ''}
                             </p>
-                            <div className="dfwgv-stat-row">
-                                <div className="dfwgv-stat">
-                                    <div className="k">Games in library</div>
-                                    <div className="v">{allGames.length}</div>
-                                </div>
-                                <div className="dfwgv-stat">
-                                    <div className="k">Available now</div>
-                                    <div className="v">{allGames.length - checkedOutCount}</div>
-                                </div>
-                                <div className="dfwgv-stat">
-                                    <div className="k">Checked out</div>
-                                    <div className="v">{checkedOutCount}</div>
-                                </div>
-                            </div>
+                            <p className="explain">
+                                Every game below is free to borrow during the event — find one that's{' '}
+                                <span className="dfwgv-pill ok">Available</span> and bring it to the library
+                                table to check it out.
+                                {plannerGamedayId ? ' You can also browse scheduled tables and grab a seat.' : ''}
+                                {' '}This page updates live all weekend.
+                            </p>
+                            <p className="counts">
+                                <b>{allGames.length}</b> games in the library · <b>{allGames.length - checkedOutCount}</b> available right now
+                            </p>
                         </section>
 
                         {plannerGamedayId && (
+                            <nav className="dfwgv-public-tabs" aria-label="Page sections">
+                                <button
+                                    className={`dfwgv-public-tab ${view === 'library' ? 'active' : ''}`}
+                                    onClick={() => setView('library')}
+                                >
+                                    🎲 Game Library <span className="count">{allGames.length}</span>
+                                </button>
+                                <button
+                                    className={`dfwgv-public-tab ${view === 'tables' ? 'active' : ''}`}
+                                    onClick={() => setView('tables')}
+                                >
+                                    🗓 Hosted Tables <span className="count">{plannerTablesSorted.length}</span>
+                                </button>
+                            </nav>
+                        )}
+
+                        {view === 'tables' && plannerGamedayId && (
                             <section className="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                                    <h2 className="text-xl font-semibold text-gray-100 m-0">Hosted tables</h2>
+                                <div className="dfwgv-tables-intro">
+                                    <p className="text-gray-300 text-sm m-0">
+                                        Community members host scheduled game sessions through the DFWGV Planner —
+                                        green dots are open seats. Times are Central.
+                                    </p>
                                     <a
-                                        className="text-sm"
+                                        className="dfwgv-btn dfwgv-btn-primary dfwgv-planner-cta"
                                         href={`https://www.dfwgamingvillage.com/planner/events/?id=${plannerGamedayId}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                     >
-                                        Join or Host a table in the Planner →
+                                        Join or Host a table →
                                     </a>
                                 </div>
-                                <p className="text-gray-300 text-sm mt-1 mb-4">
-                                    Scheduled games from {convention.plannerEvent?.title || 'the DFWGV Planner'}
-                                    {convention.plannerEvent?.location ? ` at ${convention.plannerEvent.location}` : ''}. Times are Central.
-                                </p>
                                 {plannerTablesSorted.length === 0 ? (
-                                    <p className="text-gray-400 m-0">No tables scheduled yet — be the first to host one in the Planner!</p>
+                                    <p className="text-gray-400 m-0">No tables scheduled yet — be the first to host one!</p>
                                 ) : (
                                     <ul className="dfwgv-planner-tables">
                                         {plannerTablesSorted.map(table => {
@@ -3272,53 +3289,79 @@ const PublicConventionPage = ({ conventionId }) => {
                             </section>
                         )}
 
-                        <div className="flex flex-wrap items-center gap-3">
-                            <input
-                                type="text"
-                                placeholder={`Search ${allGames.length} games…`}
-                                className="flex-grow p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100 placeholder-gray-400"
-                                style={{ flexBasis: '200px' }}
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                aria-label="Search games"
-                            />
-                            <select
-                                className="p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100"
-                                value={filter}
-                                onChange={(e) => setFilter(e.target.value)}
-                                aria-label="Filter by availability"
-                            >
-                                <option value="all">All games</option>
-                                <option value="available">Available now</option>
-                                <option value="out">Checked out</option>
-                            </select>
-                        </div>
+                        {(view === 'library' || !plannerGamedayId) && (
+                            <>
+                                <div className="dfwgv-public-toolbar">
+                                    <input
+                                        type="search"
+                                        placeholder={`🔍 Search ${allGames.length} games…`}
+                                        className="dfwgv-public-search"
+                                        value={search}
+                                        onChange={(e) => setSearch(e.target.value)}
+                                        aria-label="Search games"
+                                    />
+                                    <div className="dfwgv-filter-chips" role="group" aria-label="Filter by availability">
+                                        <button
+                                            className={`dfwgv-chip ${filter === 'all' ? 'active' : ''}`}
+                                            onClick={() => setFilter('all')}
+                                        >
+                                            All · {allGames.length}
+                                        </button>
+                                        <button
+                                            className={`dfwgv-chip ${filter === 'available' ? 'active' : ''}`}
+                                            onClick={() => setFilter('available')}
+                                        >
+                                            Available · {allGames.length - checkedOutCount}
+                                        </button>
+                                        <button
+                                            className={`dfwgv-chip ${filter === 'out' ? 'active' : ''}`}
+                                            onClick={() => setFilter('out')}
+                                        >
+                                            Checked out · {checkedOutCount}
+                                        </button>
+                                    </div>
+                                </div>
 
-                        {visibleGames.length === 0 ? (
-                            <p className="text-gray-400 text-center">No games match.</p>
-                        ) : (
-                            <ul className="dfwgv-public-list">
-                                {visibleGames.map(game => {
-                                    const duration = checkoutDuration(game);
-                                    const outLabel = duration === 'just now'
-                                        ? 'Checked out just now'
-                                        : duration ? `Checked out · ${duration}` : 'Checked out';
-                                    return (
-                                        <GameRow
-                                            key={game.id}
-                                            game={{ ...game, ownerName: '' }}
-                                            metaItems={[
-                                                `👥 ${game.minPlayers || '?'}–${game.maxPlayers || '?'}`,
-                                                `⏱ ${game.playingTime || '?'} min`,
-                                                <><span className="star">★</span> {(typeof game.averageRating === 'number') ? game.averageRating.toFixed(1) : 'N/A'}</>,
-                                            ]}
-                                            pill={game.isCheckedOutAtConvention
-                                                ? { label: outLabel, tone: 'out' }
-                                                : { label: 'Available', tone: 'ok' }}
-                                        />
-                                    );
-                                })}
-                            </ul>
+                                {visibleGames.length === 0 ? (
+                                    <p className="text-gray-400 text-center">No games match — try a different search or filter.</p>
+                                ) : (
+                                    <ul className="dfwgv-game-grid">
+                                        {visibleGames.map(game => {
+                                            const isOut = !!game.isCheckedOutAtConvention;
+                                            const duration = checkoutDuration(game);
+                                            const badgeLabel = isOut
+                                                ? (duration && duration !== 'just now' ? `Out · ${duration}` : 'Checked out')
+                                                : 'Available';
+                                            return (
+                                                <li key={game.id} className={`dfwgv-game-card${isOut ? ' out' : ''}`}>
+                                                    <div className="art-wrap">
+                                                        <img
+                                                            className="art"
+                                                            src={game.thumbnail || `https://placehold.co/200x200/18181c/b8b8c2?text=No+Img`}
+                                                            alt={game.name}
+                                                            loading="lazy"
+                                                        />
+                                                        <span className={`dfwgv-pill ${isOut ? 'out' : 'ok'} badge`}>{badgeLabel}</span>
+                                                    </div>
+                                                    <div className="body">
+                                                        <span className="name">
+                                                            {game.bggId ? (
+                                                                <a href={`https://boardgamegeek.com/boardgame/${game.bggId}`} target="_blank" rel="noopener noreferrer">
+                                                                    {game.name}
+                                                                </a>
+                                                            ) : game.name}
+                                                        </span>
+                                                        <span className="meta">
+                                                            👥 {game.minPlayers || '?'}–{game.maxPlayers || '?'} · ⏱ {game.playingTime || '?'} min
+                                                            {(typeof game.averageRating === 'number') ? <> · <span className="star">★</span> {game.averageRating.toFixed(1)}</> : null}
+                                                        </span>
+                                                    </div>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                )}
+                            </>
                         )}
 
                         <div className="dfwgv-public-footer">
