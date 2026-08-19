@@ -1,11 +1,11 @@
 {
   "files": {
     "main.css": "/library-manager/static/css/main.04c79aeb.css",
-    "main.js": "/library-manager/static/js/main.9ba7095a.js",
+    "main.js": "/library-manager/static/js/main.b912e65f.js",
     "index.html": "/library-manager/index.html"
   },
   "entrypoints": [
     "static/css/main.04c79aeb.css",
-    "static/js/main.9ba7095a.js"
+    "static/js/main.b912e65f.js"
   ]
 }
