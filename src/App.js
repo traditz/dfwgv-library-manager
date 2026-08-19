@@ -3172,7 +3172,7 @@ const PublicConventionPage = ({ conventionId }) => {
                 {status === 'ready' && convention && (
                     <>
                         <section className="dfwgv-public-hero bg-gray-800 rounded-xl border border-gray-700">
-                            <p className="eyebrow">DFW Gaming Village presents</p>
+                            <p className="eyebrow">DFW Gaming Village presents the board game library for:</p>
                             <h1>{convention.name}</h1>
                             <p className="when">
                                 📅 {new Date(convention.startDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
