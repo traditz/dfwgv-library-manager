@@ -81,12 +81,30 @@ async function fetchPlannerGamedays() {
         .sort((a, b) => new Date(b.startsAt || 0) - new Date(a.startsAt || 0));
 }
 
-async function fetchPlannerTables(gamedayId) {
-    const response = await retryFetch(`${PLANNER_BASE_URL}/gamedays/${encodeURIComponent(gamedayId)}/tables?pageSize=300`);
-    if (!response.ok) throw new Error(`Planner returned HTTP ${response.status}`);
-    const json = await response.json();
-    return (json.documents || []).map(parseFsDoc);
-}
+// Planner web config (public) — opens a second, read-only Firestore connection so
+// the public page can subscribe to a linked event's tables in real time.
+const plannerFirebaseConfig = {
+    apiKey: "AIzaSyDJYFPuNFgrhGCQQR6_X1IE4QqYDwZ6Vfk",
+    authDomain: "dfwgv-planner.firebaseapp.com",
+    projectId: PLANNER_PROJECT_ID,
+    appId: "1:699390463926:web:b47c0402e1b170c2233b17"
+};
+
+let plannerDbInstance = null;
+const getPlannerDb = () => {
+    if (!plannerDbInstance) {
+        plannerDbInstance = getFirestore(initializeApp(plannerFirebaseConfig, 'dfwgv-planner'));
+    }
+    return plannerDbInstance;
+};
+
+// Firestore Timestamps, ISO strings, or Dates → Date (or null)
+const toDateSafe = (value) => {
+    if (!value) return null;
+    if (typeof value.toDate === 'function') return value.toDate();
+    const d = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+};
 
 // Firebase Context now only provides db and auth instance, and appId
 const FirebaseContext = createContext(null);
@@ -1466,17 +1484,15 @@ const SyncPlannerModal = memo(({ convention, onClose, onSync, onUnlink, syncBusy
     return (
         <div className="dfwgv-modal-overlay fixed inset-0 flex items-center justify-center z-50 p-4">
             <div className="dfwgv-modal-panel bg-gray-800 rounded-lg shadow-xl p-6 max-w-lg w-full border border-gray-700">
-                <h2 className="text-xl font-semibold text-gray-100 mb-1">Sync Planner event</h2>
+                <h2 className="text-xl font-semibold text-gray-100 mb-1">Link Planner event</h2>
                 <p className="text-gray-300 text-sm mb-4">
-                    Copies the hosted tables of a public Planner event onto "{convention.name}" so the
-                    public library page shows them. Sync again any time to pull the latest tables.
+                    Links a public Planner event to "{convention.name}". The public library page then
+                    shows the event's hosted tables live — new tables appear automatically as hosts add them.
                 </p>
 
                 {convention.plannerEvent && (
                     <p className="text-gray-300 text-sm mb-4">
-                        Currently synced: <span className="font-semibold text-gray-100">{convention.plannerEvent.title || convention.plannerEvent.gamedayId}</span>
-                        {' '}· {convention.plannerEvent.tables?.length || 0} tables
-                        {' '}· {convention.plannerEvent.syncedAt ? new Date(convention.plannerEvent.syncedAt).toLocaleString() : ''}
+                        Currently linked: <span className="font-semibold text-gray-100">{convention.plannerEvent.title || convention.plannerEvent.gamedayId}</span>
                     </p>
                 )}
 
@@ -1520,7 +1536,7 @@ const SyncPlannerModal = memo(({ convention, onClose, onSync, onUnlink, syncBusy
                         className="dfwgv-btn dfwgv-btn-primary"
                         disabled={!selected || syncBusy}
                     >
-                        {syncBusy ? 'Syncing…' : 'Sync tables'}
+                        {syncBusy ? 'Linking…' : 'Link event'}
                     </button>
                     <button onClick={onClose} className="dfwgv-btn dfwgv-btn-secondary" disabled={syncBusy}>
                         Close
@@ -2113,25 +2129,13 @@ const App = () => {
         }
     }, [db, currentUser, fetchBggCollection, showMessage, showToast, appId, games, removedGames]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Mirror a Planner event's tables onto a convention document. The public page
-    // reads the convention doc, so synced tables show up there in real time.
-    const syncPlannerEvent = useCallback(async (conventionId, gameday) => {
+    // Link a Planner event to a convention. Only lightweight metadata is stored —
+    // the public page subscribes to the Planner's tables directly, so new tables
+    // appear there automatically without any re-sync.
+    const linkPlannerEvent = useCallback(async (conventionId, gameday) => {
         if (!db || !currentUser) return;
         setPlannerSyncBusy(true);
         try {
-            const tables = await fetchPlannerTables(gameday.id);
-            const snapshotTables = tables
-                .map(t => ({
-                    id: t.id,
-                    gameName: t.gameName || 'Game',
-                    hostDisplayName: t.hostDisplayName || '',
-                    startTime: t.startTime || null,
-                    capacity: typeof t.capacity === 'number' ? t.capacity : null,
-                    bggId: t.bggId || null,
-                    thumbUrl: t.thumbUrl || '',
-                }))
-                .sort((a, b) => new Date(a.startTime || 0) - new Date(b.startTime || 0));
-
             const conventionRef = doc(db, `artifacts/${appId}/public/data/conventions`, conventionId);
             await updateDoc(conventionRef, {
                 plannerEvent: {
@@ -2140,15 +2144,14 @@ const App = () => {
                     location: gameday.location || '',
                     startsAt: gameday.startsAt || null,
                     endsAt: gameday.endsAt || null,
-                    syncedAt: new Date().toISOString(),
-                    tables: snapshotTables,
+                    linkedAt: new Date().toISOString(),
                 },
             });
-            showToast(`Synced ${snapshotTables.length} tables from "${gameday.title || 'Planner event'}".`);
+            showToast(`Linked "${gameday.title || 'Planner event'}" — its tables now show live on the public page.`);
             setSyncingConventionId(null);
         } catch (error) {
-            console.error('[SyncPlanner] Sync failed:', error);
-            showMessage(`Planner sync failed: ${error.message}`, 'error');
+            console.error('[SyncPlanner] Link failed:', error);
+            showMessage(`Planner link failed: ${error.message}`, 'error');
         } finally {
             setPlannerSyncBusy(false);
         }
@@ -2980,7 +2983,7 @@ const App = () => {
                                 <SyncPlannerModal
                                     convention={syncingConvention}
                                     onClose={() => setSyncingConventionId(null)}
-                                    onSync={(gameday) => syncPlannerEvent(syncingConventionId, gameday)}
+                                    onSync={(gameday) => linkPlannerEvent(syncingConventionId, gameday)}
                                     onUnlink={() => unlinkPlannerEvent(syncingConventionId)}
                                     syncBusy={plannerSyncBusy}
                                 />
@@ -3076,26 +3079,55 @@ const PublicConventionPage = ({ conventionId }) => {
         return () => clearInterval(timer);
     }, []);
 
-    // Synced Planner tables grouped by Central-time day, ordered by start time.
-    // The Planner schedules everything in America/Chicago, so display follows suit.
+    // Live hosted tables from the linked Planner event: a second read-only
+    // Firestore connection subscribes to the gameday's tables subcollection, so
+    // new tables appear here the moment hosts create them in the Planner.
+    const plannerGamedayId = convention?.plannerEvent?.gamedayId || null;
+    const [plannerTables, setPlannerTables] = useState([]);
+
+    useEffect(() => {
+        if (!plannerGamedayId) {
+            setPlannerTables([]);
+            return;
+        }
+        try {
+            const plannerDb = getPlannerDb();
+            const tablesRef = collection(plannerDb, 'gamedays', plannerGamedayId, 'tables');
+            const unsubscribe = onSnapshot(tablesRef, (snapshot) => {
+                setPlannerTables(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+            }, (error) => {
+                console.error('[PublicConvention] Planner tables listener failed:', error);
+                setPlannerTables([]);
+            });
+            return () => unsubscribe();
+        } catch (error) {
+            console.error('[PublicConvention] Planner connection failed:', error);
+            setPlannerTables([]);
+        }
+    }, [plannerGamedayId]);
+
+    // Tables grouped by Central-time day, ordered by start time — the Planner
+    // schedules everything in America/Chicago, so display follows suit.
     const plannerTablesByDay = useMemo(() => {
-        const tables = convention?.plannerEvent?.tables || [];
+        if (plannerTables.length === 0) return [];
+        const sorted = [...plannerTables].sort((a, b) =>
+            (toDateSafe(a.startTime)?.getTime() || 0) - (toDateSafe(b.startTime)?.getTime() || 0)
+        );
         const groups = new Map();
-        for (const table of tables) {
-            const d = table.startTime ? new Date(table.startTime) : null;
-            const label = (d && !Number.isNaN(d.getTime()))
+        for (const table of sorted) {
+            const d = toDateSafe(table.startTime);
+            const label = d
                 ? d.toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric' })
                 : 'Time TBD';
             if (!groups.has(label)) groups.set(label, []);
             groups.get(label).push(table);
         }
         return [...groups.entries()].map(([label, groupTables]) => ({ label, tables: groupTables }));
-    }, [convention?.plannerEvent?.tables]);
+    }, [plannerTables]);
 
-    const formatTableTime = (iso) => {
-        if (!iso) return 'TBD';
-        const d = new Date(iso);
-        if (Number.isNaN(d.getTime())) return 'TBD';
+    const formatTableTime = (value) => {
+        const d = toDateSafe(value);
+        if (!d) return 'TBD';
         return d.toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' });
     };
 
@@ -3167,25 +3199,26 @@ const PublicConventionPage = ({ conventionId }) => {
                             </div>
                         </section>
 
-                        {plannerTablesByDay.length > 0 && (
+                        {plannerGamedayId && (
                             <section className="bg-gray-800 p-6 rounded-xl border border-gray-700">
                                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                                     <h2 className="text-xl font-semibold text-gray-100 m-0">Hosted tables</h2>
-                                    {convention.plannerEvent?.gamedayId && (
-                                        <a
-                                            className="text-sm"
-                                            href={`https://www.dfwgamingvillage.com/planner/events/?id=${convention.plannerEvent.gamedayId}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            Join a table in the Planner →
-                                        </a>
-                                    )}
+                                    <a
+                                        className="text-sm"
+                                        href={`https://www.dfwgamingvillage.com/planner/events/?id=${plannerGamedayId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        Join a table in the Planner →
+                                    </a>
                                 </div>
                                 <p className="text-gray-300 text-sm mt-1 mb-4">
                                     Scheduled games from {convention.plannerEvent?.title || 'the DFWGV Planner'}
                                     {convention.plannerEvent?.location ? ` at ${convention.plannerEvent.location}` : ''}. Times are Central.
                                 </p>
+                                {plannerTablesByDay.length === 0 && (
+                                    <p className="text-gray-400 m-0">No tables scheduled yet — be the first to host one in the Planner!</p>
+                                )}
                                 {plannerTablesByDay.map(group => (
                                     <div key={group.label} className="dfwgv-planner-group">
                                         {plannerTablesByDay.length > 1 && (
