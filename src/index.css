@@ -1153,6 +1153,74 @@ body::before {
   gap: 10px;
 }
 
+/* Synced Planner tables on the public page */
+
+.dfwgv-planner-group + .dfwgv-planner-group {
+  margin-top: 14px;
+}
+
+.dfwgv-planner-day {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--dfwgv-gold);
+}
+
+.dfwgv-planner-tables {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.dfwgv-planner-table {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border: 1px solid var(--dfwgv-line);
+  border-radius: var(--dfwgv-radius);
+  background: rgba(255, 255, 255, .04);
+}
+
+.dfwgv-planner-time {
+  flex: 0 0 auto;
+  min-width: 74px;
+  padding: 3px 10px;
+  border: 1px solid rgba(245, 197, 66, .35);
+  border-radius: 999px;
+  background: rgba(245, 197, 66, .08);
+  color: var(--dfwgv-gold);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.dfwgv-planner-game {
+  flex: 1 1 auto;
+  min-width: 140px;
+  color: var(--dfwgv-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.dfwgv-planner-host {
+  color: var(--dfwgv-muted);
+  font-size: 12.5px;
+}
+
+.dfwgv-planner-seats {
+  color: var(--dfwgv-muted);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .dfwgv-public-footer {
   text-align: center;
   color: var(--dfwgv-muted);

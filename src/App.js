@@ -2,7 +2,7 @@
 import React, { useState, useEffect, createContext, useContext, useRef, useCallback, memo, useMemo } from 'react'; // Added useMemo
 import { initializeApp } from 'firebase/app';
 import * as FirebaseAuth from 'firebase/auth'; // Import all from firebase/auth as FirebaseAuth
-import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, getDocs } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, addDoc, setDoc, updateDoc, deleteDoc, deleteField, onSnapshot, collection, getDocs } from 'firebase/firestore';
 
 // Define Firebase configuration explicitly for external deployment (e.g., GitHub Pages).
 // When running within the Canvas environment, global variables __firebase_config and __initial_auth_token
@@ -18,6 +18,75 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
 
 // Use __app_id if available, otherwise fallback to firebaseConfig.projectId
 const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+
+// Overall admins (lowercase emails). Only these logins see the Planner-sync controls.
+const ADMIN_EMAILS = ['joemsprague@gmail.com'];
+
+// DFWGV Planner lives in its own Firebase project. Its public+published gamedays and
+// their tables are world-readable, so the sync reads them over the Firestore REST API
+// rather than initializing a second Firebase app.
+const PLANNER_PROJECT_ID = 'dfwgv-planner';
+const PLANNER_BASE_URL = `https://firestore.googleapis.com/v1/projects/${PLANNER_PROJECT_ID}/databases/(default)/documents`;
+
+// Collapse a Firestore REST typed value ({stringValue: "x"}) into a plain JS value.
+const parseFsValue = (value) => {
+    if (value === null || value === undefined) return null;
+    if ('stringValue' in value) return value.stringValue;
+    if ('integerValue' in value) return parseInt(value.integerValue, 10);
+    if ('doubleValue' in value) return value.doubleValue;
+    if ('booleanValue' in value) return value.booleanValue;
+    if ('timestampValue' in value) return value.timestampValue;
+    if ('mapValue' in value) return parseFsFields(value.mapValue.fields || {});
+    if ('arrayValue' in value) return (value.arrayValue.values || []).map(parseFsValue);
+    return null;
+};
+
+const parseFsFields = (fields) => {
+    const out = {};
+    for (const [key, value] of Object.entries(fields)) {
+        out[key] = parseFsValue(value);
+    }
+    return out;
+};
+
+const parseFsDoc = (docJson) => ({ id: docJson.name.split('/').pop(), ...parseFsFields(docJson.fields || {}) });
+
+// Public, published Planner events, newest first. The visibility/status filters are
+// required — the Planner's rules only permit anonymous reads of that query shape.
+async function fetchPlannerGamedays() {
+    const response = await retryFetch(`${PLANNER_BASE_URL}:runQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            structuredQuery: {
+                from: [{ collectionId: 'gamedays' }],
+                where: {
+                    compositeFilter: {
+                        op: 'AND',
+                        filters: [
+                            { fieldFilter: { field: { fieldPath: 'visibility' }, op: 'EQUAL', value: { stringValue: 'public' } } },
+                            { fieldFilter: { field: { fieldPath: 'status' }, op: 'EQUAL', value: { stringValue: 'published' } } },
+                        ],
+                    },
+                },
+                limit: 100,
+            },
+        }),
+    });
+    if (!response.ok) throw new Error(`Planner returned HTTP ${response.status}`);
+    const rows = await response.json();
+    return rows
+        .filter(row => row.document)
+        .map(row => parseFsDoc(row.document))
+        .sort((a, b) => new Date(b.startsAt || 0) - new Date(a.startsAt || 0));
+}
+
+async function fetchPlannerTables(gamedayId) {
+    const response = await retryFetch(`${PLANNER_BASE_URL}/gamedays/${encodeURIComponent(gamedayId)}/tables?pageSize=300`);
+    if (!response.ok) throw new Error(`Planner returned HTTP ${response.status}`);
+    const json = await response.json();
+    return (json.documents || []).map(parseFsDoc);
+}
 
 // Firebase Context now only provides db and auth instance, and appId
 const FirebaseContext = createContext(null);
@@ -1374,10 +1443,99 @@ const EditConventionModal = memo(({ convention, onClose, onSave, loading, showMe
 });
 
 
+// Admin-only modal: pick a public DFWGV Planner event and mirror its hosted
+// tables onto a convention, so the public library page can display them.
+const SyncPlannerModal = memo(({ convention, onClose, onSync, onUnlink, syncBusy }) => {
+    const [gamedays, setGamedays] = useState(null); // null = still loading
+    const [loadError, setLoadError] = useState('');
+    const [selectedId, setSelectedId] = useState(convention.plannerEvent?.gamedayId || '');
+
+    useEffect(() => {
+        let cancelled = false;
+        fetchPlannerGamedays()
+            .then(list => { if (!cancelled) setGamedays(list); })
+            .catch(error => {
+                console.error('[SyncPlanner] Failed to list Planner events:', error);
+                if (!cancelled) setLoadError(error.message);
+            });
+        return () => { cancelled = true; };
+    }, []);
+
+    const selected = (gamedays || []).find(gd => gd.id === selectedId) || null;
+
+    return (
+        <div className="dfwgv-modal-overlay fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="dfwgv-modal-panel bg-gray-800 rounded-lg shadow-xl p-6 max-w-lg w-full border border-gray-700">
+                <h2 className="text-xl font-semibold text-gray-100 mb-1">Sync Planner event</h2>
+                <p className="text-gray-300 text-sm mb-4">
+                    Copies the hosted tables of a public Planner event onto "{convention.name}" so the
+                    public library page shows them. Sync again any time to pull the latest tables.
+                </p>
+
+                {convention.plannerEvent && (
+                    <p className="text-gray-300 text-sm mb-4">
+                        Currently synced: <span className="font-semibold text-gray-100">{convention.plannerEvent.title || convention.plannerEvent.gamedayId}</span>
+                        {' '}· {convention.plannerEvent.tables?.length || 0} tables
+                        {' '}· {convention.plannerEvent.syncedAt ? new Date(convention.plannerEvent.syncedAt).toLocaleString() : ''}
+                    </p>
+                )}
+
+                {loadError ? (
+                    <p className="text-red-400 text-sm mb-4">Couldn't load Planner events: {loadError}</p>
+                ) : gamedays === null ? (
+                    <p className="text-gray-400 text-sm mb-4">Loading Planner events…</p>
+                ) : gamedays.length === 0 ? (
+                    <p className="text-gray-400 text-sm mb-4">No public, published Planner events found.</p>
+                ) : (
+                    <div className="dfwgv-modal-scroll mb-4" style={{ maxHeight: '260px' }}>
+                        {gamedays.map(gd => (
+                            <label key={gd.id} className="flex items-start gap-3 p-2 rounded cursor-pointer hover:bg-gray-700">
+                                <input
+                                    type="radio"
+                                    name="plannerEvent"
+                                    className="mt-1"
+                                    checked={selectedId === gd.id}
+                                    onChange={() => setSelectedId(gd.id)}
+                                />
+                                <span>
+                                    <span className="text-gray-100 font-semibold block">{gd.title || gd.id}</span>
+                                    <span className="text-gray-400 text-xs">
+                                        {gd.startsAt ? new Date(gd.startsAt).toLocaleDateString() : 'Date TBD'}
+                                        {gd.location ? ` • ${gd.location}` : ''}
+                                    </span>
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                )}
+
+                <div className="flex flex-wrap justify-end gap-3">
+                    {convention.plannerEvent && (
+                        <button onClick={onUnlink} className="dfwgv-btn dfwgv-btn-danger" disabled={syncBusy}>
+                            Unlink
+                        </button>
+                    )}
+                    <button
+                        onClick={() => selected && onSync(selected)}
+                        className="dfwgv-btn dfwgv-btn-primary"
+                        disabled={!selected || syncBusy}
+                    >
+                        {syncBusy ? 'Syncing…' : 'Sync tables'}
+                    </button>
+                    <button onClick={onClose} className="dfwgv-btn dfwgv-btn-secondary" disabled={syncBusy}>
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+
 // New All Conventions Page Component
 const AllConventionsPage = memo(({
     conventions, currentConvention, createConvention, deleteConvention, updateConvention,
-    loading, showMessage, setCurrentConventionId, setEditingConvention, copyPublicLink
+    loading, showMessage, setCurrentConventionId, setEditingConvention, copyPublicLink,
+    isAdmin, onSyncPlanner
 }) => {
     const [newConventionName, setNewConventionName] = useState('');
     const [newConventionStartDate, setNewConventionStartDate] = useState('');
@@ -1471,6 +1629,7 @@ const AllConventionsPage = memo(({
                                         <span className="font-medium text-gray-100 block">
                                             {conv.name}
                                             {isSelected && <span className="dfwgv-pill ok ml-2">Selected</span>}
+                                            {conv.plannerEvent && <span className="dfwgv-pill muted ml-2">🗓 {conv.plannerEvent.title || 'Planner event'}</span>}
                                         </span>
                                         <span className="text-sm text-gray-300">
                                             {new Date(conv.startDate).toLocaleDateString()} - {new Date(conv.endDate).toLocaleDateString()}
@@ -1490,6 +1649,16 @@ const AllConventionsPage = memo(({
                                         >
                                             🔗 Public link
                                         </button>
+                                        {isAdmin && (
+                                            <button
+                                                onClick={() => onSyncPlanner(conv)}
+                                                className="dfwgv-btn dfwgv-btn-secondary"
+                                                disabled={loading}
+                                                title="Sync a DFWGV Planner event's hosted tables onto this convention's public page (admin only)"
+                                            >
+                                                🗓 Planner sync
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => setEditingConvention(conv)}
                                             className="dfwgv-btn dfwgv-btn-secondary"
@@ -1721,6 +1890,13 @@ const App = () => {
     const [importStatus, setImportStatus] = useState('');
     const [importResults, setImportResults] = useState([]);
 
+    // Overall admin: sees the Planner-sync controls (client-side gating by login email)
+    const isAdmin = !!currentUser?.email && ADMIN_EMAILS.includes(currentUser.email.toLowerCase());
+
+    // Planner sync state: which convention's sync modal is open, and whether a sync is running
+    const [syncingConventionId, setSyncingConventionId] = useState(null);
+    const [plannerSyncBusy, setPlannerSyncBusy] = useState(false);
+
     // Copy a convention's public read-only link (?con=<id>) to the clipboard
     const copyPublicLink = useCallback(async (conv) => {
         if (!conv) return;
@@ -1936,6 +2112,63 @@ const App = () => {
             setLoading(false);
         }
     }, [db, currentUser, fetchBggCollection, showMessage, showToast, appId, games, removedGames]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Mirror a Planner event's tables onto a convention document. The public page
+    // reads the convention doc, so synced tables show up there in real time.
+    const syncPlannerEvent = useCallback(async (conventionId, gameday) => {
+        if (!db || !currentUser) return;
+        setPlannerSyncBusy(true);
+        try {
+            const tables = await fetchPlannerTables(gameday.id);
+            const snapshotTables = tables
+                .map(t => ({
+                    id: t.id,
+                    gameName: t.gameName || 'Game',
+                    hostDisplayName: t.hostDisplayName || '',
+                    startTime: t.startTime || null,
+                    capacity: typeof t.capacity === 'number' ? t.capacity : null,
+                    bggId: t.bggId || null,
+                    thumbUrl: t.thumbUrl || '',
+                }))
+                .sort((a, b) => new Date(a.startTime || 0) - new Date(b.startTime || 0));
+
+            const conventionRef = doc(db, `artifacts/${appId}/public/data/conventions`, conventionId);
+            await updateDoc(conventionRef, {
+                plannerEvent: {
+                    gamedayId: gameday.id,
+                    title: gameday.title || '',
+                    location: gameday.location || '',
+                    startsAt: gameday.startsAt || null,
+                    endsAt: gameday.endsAt || null,
+                    syncedAt: new Date().toISOString(),
+                    tables: snapshotTables,
+                },
+            });
+            showToast(`Synced ${snapshotTables.length} tables from "${gameday.title || 'Planner event'}".`);
+            setSyncingConventionId(null);
+        } catch (error) {
+            console.error('[SyncPlanner] Sync failed:', error);
+            showMessage(`Planner sync failed: ${error.message}`, 'error');
+        } finally {
+            setPlannerSyncBusy(false);
+        }
+    }, [db, currentUser, appId, showToast, showMessage]);
+
+    const unlinkPlannerEvent = useCallback(async (conventionId) => {
+        if (!db || !currentUser) return;
+        setPlannerSyncBusy(true);
+        try {
+            const conventionRef = doc(db, `artifacts/${appId}/public/data/conventions`, conventionId);
+            await updateDoc(conventionRef, { plannerEvent: deleteField() });
+            showToast('Planner event unlinked.');
+            setSyncingConventionId(null);
+        } catch (error) {
+            console.error('[SyncPlanner] Unlink failed:', error);
+            showMessage(`Unlink failed: ${error.message}`, 'error');
+        } finally {
+            setPlannerSyncBusy(false);
+        }
+    }, [db, currentUser, appId, showToast, showMessage]);
 
     // Listen for real-time updates to games and conventions
     useEffect(() => {
@@ -2736,8 +2969,23 @@ const App = () => {
                                 setCurrentConventionId={setCurrentConventionId}
                                 setEditingConvention={setEditingConvention}
                                 copyPublicLink={copyPublicLink}
+                                isAdmin={isAdmin}
+                                onSyncPlanner={(conv) => setSyncingConventionId(conv.id)}
                             />
                         )}
+
+                        {syncingConventionId && (() => {
+                            const syncingConvention = conventions.find(conv => conv.id === syncingConventionId);
+                            return syncingConvention ? (
+                                <SyncPlannerModal
+                                    convention={syncingConvention}
+                                    onClose={() => setSyncingConventionId(null)}
+                                    onSync={(gameday) => syncPlannerEvent(syncingConventionId, gameday)}
+                                    onUnlink={() => unlinkPlannerEvent(syncingConventionId)}
+                                    syncBusy={plannerSyncBusy}
+                                />
+                            ) : null;
+                        })()}
 
                         {currentPage === 'checkedOutGames' && (
                             <CheckedOutGamesPage
@@ -2828,6 +3076,29 @@ const PublicConventionPage = ({ conventionId }) => {
         return () => clearInterval(timer);
     }, []);
 
+    // Synced Planner tables grouped by Central-time day, ordered by start time.
+    // The Planner schedules everything in America/Chicago, so display follows suit.
+    const plannerTablesByDay = useMemo(() => {
+        const tables = convention?.plannerEvent?.tables || [];
+        const groups = new Map();
+        for (const table of tables) {
+            const d = table.startTime ? new Date(table.startTime) : null;
+            const label = (d && !Number.isNaN(d.getTime()))
+                ? d.toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric' })
+                : 'Time TBD';
+            if (!groups.has(label)) groups.set(label, []);
+            groups.get(label).push(table);
+        }
+        return [...groups.entries()].map(([label, groupTables]) => ({ label, tables: groupTables }));
+    }, [convention?.plannerEvent?.tables]);
+
+    const formatTableTime = (iso) => {
+        if (!iso) return 'TBD';
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return 'TBD';
+        return d.toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' });
+    };
+
     // How long the current checkout has been running; the last entry in
     // conventionCheckoutTimes is when the active checkout started.
     const checkoutDuration = (game) => {
@@ -2895,6 +3166,51 @@ const PublicConventionPage = ({ conventionId }) => {
                                 </div>
                             </div>
                         </section>
+
+                        {plannerTablesByDay.length > 0 && (
+                            <section className="bg-gray-800 p-6 rounded-xl border border-gray-700">
+                                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                                    <h2 className="text-xl font-semibold text-gray-100 m-0">Hosted tables</h2>
+                                    {convention.plannerEvent?.gamedayId && (
+                                        <a
+                                            className="text-sm"
+                                            href={`https://www.dfwgamingvillage.com/planner/events/?id=${convention.plannerEvent.gamedayId}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                        >
+                                            Join a table in the Planner →
+                                        </a>
+                                    )}
+                                </div>
+                                <p className="text-gray-300 text-sm mt-1 mb-4">
+                                    Scheduled games from {convention.plannerEvent?.title || 'the DFWGV Planner'}
+                                    {convention.plannerEvent?.location ? ` at ${convention.plannerEvent.location}` : ''}. Times are Central.
+                                </p>
+                                {plannerTablesByDay.map(group => (
+                                    <div key={group.label} className="dfwgv-planner-group">
+                                        {plannerTablesByDay.length > 1 && (
+                                            <div className="dfwgv-planner-day">{group.label}</div>
+                                        )}
+                                        <ul className="dfwgv-planner-tables">
+                                            {group.tables.map(table => (
+                                                <li key={table.id} className="dfwgv-planner-table">
+                                                    <span className="dfwgv-planner-time">{formatTableTime(table.startTime)}</span>
+                                                    <span className="dfwgv-planner-game">
+                                                        {table.bggId ? (
+                                                            <a href={`https://boardgamegeek.com/boardgame/${table.bggId}`} target="_blank" rel="noopener noreferrer">
+                                                                {table.gameName}
+                                                            </a>
+                                                        ) : table.gameName}
+                                                    </span>
+                                                    <span className="dfwgv-planner-host">Host: {table.hostDisplayName || 'TBD'}</span>
+                                                    {table.capacity ? <span className="dfwgv-planner-seats">{table.capacity} seats</span> : null}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                ))}
+                            </section>
+                        )}
 
                         <div className="flex flex-wrap items-center gap-3">
                             <input
