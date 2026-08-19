@@ -3341,7 +3341,9 @@ const PublicConventionPage = ({ conventionId }) => {
                                                             alt={game.name}
                                                             loading="lazy"
                                                         />
-                                                        <span className={`dfwgv-pill ${isOut ? 'out' : 'ok'} badge`}>{badgeLabel}</span>
+                                                    </div>
+                                                    <div className={`status ${isOut ? 'out' : 'ok'}`}>
+                                                        <span className="dot" aria-hidden="true"></span>{badgeLabel}
                                                     </div>
                                                     <div className="body">
                                                         <span className="name">

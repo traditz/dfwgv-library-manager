@@ -1321,11 +1321,39 @@ body::before {
   filter: grayscale(.55) brightness(.6);
 }
 
-.dfwgv-game-card .badge {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  backdrop-filter: blur(4px);
+/* Slim status strip between the art and the title — off the art so it stays
+   readable no matter what colors the box cover uses. */
+.dfwgv-game-card .status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--dfwgv-line);
+  border-bottom: 1px solid var(--dfwgv-line);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dfwgv-game-card .status.ok {
+  color: var(--dfwgv-success);
+  background: rgba(34, 197, 94, .1);
+}
+
+.dfwgv-game-card .status.out {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, .1);
+}
+
+.dfwgv-game-card .status .dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .dfwgv-game-card .body {
