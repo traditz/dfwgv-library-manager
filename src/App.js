@@ -3106,29 +3106,21 @@ const PublicConventionPage = ({ conventionId }) => {
         }
     }, [plannerGamedayId]);
 
-    // Tables grouped by Central-time day, ordered by start time — the Planner
-    // schedules everything in America/Chicago, so display follows suit.
-    const plannerTablesByDay = useMemo(() => {
-        if (plannerTables.length === 0) return [];
-        const sorted = [...plannerTables].sort((a, b) =>
+    // Tables ordered by start time — the Planner schedules everything in
+    // America/Chicago, so display follows suit.
+    const plannerTablesSorted = useMemo(() => {
+        return [...plannerTables].sort((a, b) =>
             (toDateSafe(a.startTime)?.getTime() || 0) - (toDateSafe(b.startTime)?.getTime() || 0)
         );
-        const groups = new Map();
-        for (const table of sorted) {
-            const d = toDateSafe(table.startTime);
-            const label = d
-                ? d.toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric' })
-                : 'Time TBD';
-            if (!groups.has(label)) groups.set(label, []);
-            groups.get(label).push(table);
-        }
-        return [...groups.entries()].map(([label, groupTables]) => ({ label, tables: groupTables }));
     }, [plannerTables]);
 
-    const formatTableTime = (value) => {
+    // "Fri, Aug 21 · 5:00 PM" in Central time
+    const formatTableWhen = (value) => {
         const d = toDateSafe(value);
-        if (!d) return 'TBD';
-        return d.toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' });
+        if (!d) return 'Time TBD';
+        const day = d.toLocaleDateString('en-US', { timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric' });
+        const time = d.toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' });
+        return `${day} · ${time}`;
     };
 
     // How long the current checkout has been running; the last entry in
@@ -3209,39 +3201,74 @@ const PublicConventionPage = ({ conventionId }) => {
                                         target="_blank"
                                         rel="noopener noreferrer"
                                     >
-                                        Join a table in the Planner →
+                                        Join or Host a table in the Planner →
                                     </a>
                                 </div>
                                 <p className="text-gray-300 text-sm mt-1 mb-4">
                                     Scheduled games from {convention.plannerEvent?.title || 'the DFWGV Planner'}
                                     {convention.plannerEvent?.location ? ` at ${convention.plannerEvent.location}` : ''}. Times are Central.
                                 </p>
-                                {plannerTablesByDay.length === 0 && (
+                                {plannerTablesSorted.length === 0 ? (
                                     <p className="text-gray-400 m-0">No tables scheduled yet — be the first to host one in the Planner!</p>
-                                )}
-                                {plannerTablesByDay.map(group => (
-                                    <div key={group.label} className="dfwgv-planner-group">
-                                        {plannerTablesByDay.length > 1 && (
-                                            <div className="dfwgv-planner-day">{group.label}</div>
-                                        )}
-                                        <ul className="dfwgv-planner-tables">
-                                            {group.tables.map(table => (
+                                ) : (
+                                    <ul className="dfwgv-planner-tables">
+                                        {plannerTablesSorted.map(table => {
+                                            const cap = Number(table.capacity || 0);
+                                            const confirmed = Number(table.confirmedCount || 0);
+                                            const waitlist = Number(table.waitlistCount || 0);
+                                            const isFull = cap > 0 && confirmed >= cap;
+                                            const openSeats = Math.max(cap - confirmed, 0);
+                                            const usePips = cap > 0 && cap <= 12;
+                                            return (
                                                 <li key={table.id} className="dfwgv-planner-table">
-                                                    <span className="dfwgv-planner-time">{formatTableTime(table.startTime)}</span>
-                                                    <span className="dfwgv-planner-game">
-                                                        {table.bggId ? (
-                                                            <a href={`https://boardgamegeek.com/boardgame/${table.bggId}`} target="_blank" rel="noopener noreferrer">
-                                                                {table.gameName}
-                                                            </a>
-                                                        ) : table.gameName}
-                                                    </span>
-                                                    <span className="dfwgv-planner-host">Host: {table.hostDisplayName || 'TBD'}</span>
-                                                    {table.capacity ? <span className="dfwgv-planner-seats">{table.capacity} seats</span> : null}
+                                                    <img
+                                                        className="dfwgv-planner-thumb"
+                                                        src={table.thumbUrl || `https://placehold.co/96x96/18181c/b8b8c2?text=No+Img`}
+                                                        alt={table.gameName || 'Game'}
+                                                        loading="lazy"
+                                                    />
+                                                    <div className="dfwgv-planner-info">
+                                                        <span className="dfwgv-planner-game">
+                                                            {table.bggId ? (
+                                                                <a href={`https://boardgamegeek.com/boardgame/${table.bggId}`} target="_blank" rel="noopener noreferrer">
+                                                                    {table.gameName}
+                                                                </a>
+                                                            ) : table.gameName}
+                                                        </span>
+                                                        <span className="dfwgv-planner-host">Host: {table.hostDisplayName || 'TBD'}</span>
+                                                    </div>
+                                                    <div className="dfwgv-planner-right">
+                                                        <span className="dfwgv-planner-time">{formatTableWhen(table.startTime)}</span>
+                                                        {cap > 0 && (
+                                                            <div className={`dfwgv-planner-seatswrap ${isFull ? 'is-full' : ''}`}>
+                                                                <span className="dfwgv-planner-seats">
+                                                                    {isFull
+                                                                        ? `Full · ${confirmed}/${cap} seats`
+                                                                        : `${confirmed}/${cap} seats · ${openSeats} open`}
+                                                                    {waitlist ? ` · +${waitlist} waitlist` : ''}
+                                                                </span>
+                                                                {usePips ? (
+                                                                    <span className="dfwgv-seat-pips" aria-hidden="true">
+                                                                        {Array.from({ length: cap }, (_, i) => (
+                                                                            <span key={i} className={`dfwgv-seat-dot${i < Math.min(confirmed, cap) ? ' is-filled' : ''}`}></span>
+                                                                        ))}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="dfwgv-seats-bar" aria-hidden="true">
+                                                                        <span
+                                                                            className="dfwgv-seats-fill"
+                                                                            style={{ width: `${Math.min(100, Math.round((confirmed / cap) * 100))}%` }}
+                                                                        ></span>
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </li>
-                                            ))}
-                                        </ul>
-                                    </div>
-                                ))}
+                                            );
+                                        })}
+                                    </ul>
+                                )}
                             </section>
                         )}
 

@@ -1153,43 +1153,64 @@ body::before {
   gap: 10px;
 }
 
-/* Synced Planner tables on the public page */
-
-.dfwgv-planner-group + .dfwgv-planner-group {
-  margin-top: 14px;
-}
-
-.dfwgv-planner-day {
-  margin-bottom: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .1em;
-  color: var(--dfwgv-gold);
-}
+/* Linked Planner tables on the public page */
 
 .dfwgv-planner-tables {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .dfwgv-planner-table {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
-  padding: 10px 14px;
+  padding: 12px 14px;
   border: 1px solid var(--dfwgv-line);
   border-radius: var(--dfwgv-radius);
   background: rgba(255, 255, 255, .04);
 }
 
-.dfwgv-planner-time {
+.dfwgv-planner-thumb {
+  width: 48px;
+  height: 48px;
   flex: 0 0 auto;
-  min-width: 74px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, .06);
+}
+
+.dfwgv-planner-info {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.dfwgv-planner-game {
+  display: block;
+  color: var(--dfwgv-text);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.dfwgv-planner-host {
+  display: block;
+  margin-top: 2px;
+  color: var(--dfwgv-muted);
+  font-size: 12.5px;
+}
+
+.dfwgv-planner-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.dfwgv-planner-time {
   padding: 3px 10px;
   border: 1px solid rgba(245, 197, 66, .35);
   border-radius: 999px;
@@ -1198,27 +1219,89 @@ body::before {
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  text-align: center;
+  white-space: nowrap;
 }
 
-.dfwgv-planner-game {
-  flex: 1 1 auto;
-  min-width: 140px;
-  color: var(--dfwgv-text);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-.dfwgv-planner-host {
-  color: var(--dfwgv-muted);
-  font-size: 12.5px;
+.dfwgv-planner-seatswrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
 }
 
 .dfwgv-planner-seats {
   color: var(--dfwgv-muted);
-  font-size: 12.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Seat dots, matching the Planner: one per chair, green fill as people join,
+   red when the table is full. Bar fallback for large capacities. */
+.dfwgv-seat-pips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 170px;
+}
+
+.dfwgv-seat-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, .28);
+  background: transparent;
+}
+
+.dfwgv-seat-dot.is-filled {
+  border-color: transparent;
+  background: linear-gradient(180deg, #4ade80, var(--dfwgv-success));
+  box-shadow: 0 0 6px rgba(34, 197, 94, .45);
+}
+
+.dfwgv-planner-seatswrap.is-full .dfwgv-seat-dot.is-filled {
+  background: linear-gradient(180deg, #f87171, var(--dfwgv-danger));
+  box-shadow: 0 0 6px rgba(239, 68, 68, .4);
+}
+
+.dfwgv-seats-bar {
+  display: inline-block;
+  width: 120px;
+  height: 7px;
+  border-radius: 999px;
+  border: 1px solid var(--dfwgv-line);
+  background: rgba(255, 255, 255, .06);
+  overflow: hidden;
+}
+
+.dfwgv-seats-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #4ade80, var(--dfwgv-success));
+}
+
+.dfwgv-planner-seatswrap.is-full .dfwgv-seats-fill {
+  background: linear-gradient(180deg, #f87171, var(--dfwgv-danger));
+}
+
+@media (max-width: 640px) {
+  .dfwgv-planner-right {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+
+  .dfwgv-planner-seatswrap {
+    align-items: flex-start;
+  }
+
+  .dfwgv-seat-pips {
+    justify-content: flex-start;
+  }
 }
 
 .dfwgv-public-footer {
