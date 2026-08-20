@@ -1714,3 +1714,81 @@ body::before {
     margin-top: 10px;
   }
 }
+
+/* Multi-day conventions: day headings + finished-day treatment */
+.dfwgv-planner-dayhead {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 0 4px;
+    padding: 8px 12px;
+    border: 1px solid rgba(255, 255, 255, .12);
+    border-left: 3px solid #f5c542;
+    border-radius: 9px;
+    background: rgba(245, 197, 66, .08);
+    list-style: none;
+}
+
+.dfwgv-planner-dayhead.is-past {
+    border-left-color: rgba(255, 255, 255, .25);
+    background: rgba(255, 255, 255, .03);
+    opacity: .75;
+}
+
+.dfwgv-planner-dayname { font-weight: 800; color: #f7f7f8; }
+
+.dfwgv-planner-daynum,
+.dfwgv-planner-daystate {
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.dfwgv-planner-daynum {
+    border: 1px solid rgba(245, 197, 66, .4);
+    background: rgba(245, 197, 66, .12);
+    color: #ffe7a3;
+}
+
+.dfwgv-planner-daystate.is-past {
+    border: 1px solid rgba(255, 255, 255, .2);
+    background: rgba(255, 255, 255, .06);
+    color: #b8b8c2;
+}
+
+.dfwgv-planner-daystate.is-today {
+    border: 1px solid rgba(34, 197, 94, .4);
+    background: rgba(34, 197, 94, .12);
+    color: #bbf7d0;
+}
+
+.dfwgv-planner-table.is-past { opacity: .62; }
+.dfwgv-planner-table.is-past:hover { opacity: .85; }
+
+.dfwgv-planner-timepill {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 6px;
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    vertical-align: middle;
+}
+
+.dfwgv-planner-timepill.is-past {
+    border: 1px solid rgba(255, 255, 255, .2);
+    background: rgba(255, 255, 255, .06);
+    color: #b8b8c2;
+}
+
+.dfwgv-planner-timepill.is-started {
+    border: 1px solid rgba(245, 158, 11, .45);
+    background: rgba(245, 158, 11, .12);
+    color: #fed7aa;
+}

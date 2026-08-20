@@ -3115,6 +3115,57 @@ const PublicConventionPage = ({ conventionId }) => {
         );
     }, [plannerTables]);
 
+    // A ticking "today" so a day rolling over regroups the list on its own.
+    const [nowTick, setNowTick] = useState(() => Date.now());
+    useEffect(() => {
+        const id = setInterval(() => setNowTick(Date.now()), 60 * 1000);
+        return () => clearInterval(id);
+    }, []);
+
+    // Central-time day key (YYYY-MM-DD) for grouping.
+    const centralDayKey = (value) => {
+        const d = toDateSafe(value);
+        if (!d) return '';
+        const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit',
+        }).formatToParts(d);
+        const v = Object.fromEntries(parts.map(part => [part.type, part.value]));
+        return `${v.year}-${v.month}-${v.day}`;
+    };
+
+    const formatDayHeading = (dayKey) => new Date(`${dayKey}T12:00:00Z`).toLocaleDateString('en-US', {
+        timeZone: 'America/Chicago', weekday: 'short', month: 'short', day: 'numeric',
+    });
+
+    // Multi-day conventions group tables under a heading per day; finished days
+    // sink to the bottom and read as Past. Single-day events are untouched.
+    const plannerDayGroups = useMemo(() => {
+        const todayKey = centralDayKey(new Date());
+        const byDay = new Map();
+        for (const table of plannerTablesSorted) {
+            const key = centralDayKey(table.startTime) || 'tbd';
+            if (!byDay.has(key)) byDay.set(key, []);
+            byDay.get(key).push(table);
+        }
+        const keys = [...byDay.keys()].filter(k => k !== 'tbd').sort();
+        const groups = keys.map((key, idx) => ({
+            key,
+            dayNumber: idx + 1,
+            heading: formatDayHeading(key),
+            isPast: key < todayKey,
+            isToday: key === todayKey,
+            tables: byDay.get(key),
+        }));
+        if (byDay.has('tbd')) {
+            groups.push({ key: 'tbd', dayNumber: 0, heading: 'Time TBD', isPast: false, isToday: false, tables: byDay.get('tbd') });
+        }
+        // Upcoming days first, finished days last.
+        const upcoming = groups.filter(g => !g.isPast);
+        const finished = groups.filter(g => g.isPast);
+        return { groups: [...upcoming, ...finished], multiDay: keys.length > 1, todayKey };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [plannerTablesSorted, nowTick]);
+
     // "Fri, Aug 21 · 5:00 PM" in Central time
     const formatTableWhen = (value) => {
         const d = toDateSafe(value);
@@ -3229,15 +3280,30 @@ const PublicConventionPage = ({ conventionId }) => {
                                     <p className="text-gray-400 m-0">No tables scheduled yet — be the first to host one!</p>
                                 ) : (
                                     <ul className="dfwgv-planner-tables">
-                                        {plannerTablesSorted.map(table => {
+                                        {(plannerDayGroups.multiDay
+                                            ? plannerDayGroups.groups.flatMap(group => [
+                                                <li key={`day-${group.key}`} className={`dfwgv-planner-dayhead${group.isPast ? ' is-past' : ''}`}>
+                                                    <span className="dfwgv-planner-dayname">{group.heading}</span>
+                                                    {group.dayNumber ? <span className="dfwgv-planner-daynum">Day {group.dayNumber}</span> : null}
+                                                    {group.isPast ? <span className="dfwgv-planner-daystate is-past">Past</span> : null}
+                                                    {group.isToday ? <span className="dfwgv-planner-daystate is-today">Today</span> : null}
+                                                </li>,
+                                                ...group.tables.map(t => ({ ...t, __past: group.isPast, __today: group.isToday })),
+                                            ])
+                                            : plannerTablesSorted
+                                        ).map(table => {
+                                            // Day headings are already-rendered elements.
+                                            if (React.isValidElement(table)) return table;
                                             const cap = Number(table.capacity || 0);
                                             const confirmed = Number(table.confirmedCount || 0);
                                             const waitlist = Number(table.waitlistCount || 0);
                                             const isFull = cap > 0 && confirmed >= cap;
                                             const openSeats = Math.max(cap - confirmed, 0);
                                             const usePips = cap > 0 && cap <= 12;
+                                            const startedToday = table.__today
+                                                && (toDateSafe(table.startTime)?.getTime() || 0) < nowTick;
                                             return (
-                                                <li key={table.id} className="dfwgv-planner-table">
+                                                <li key={table.id} className={`dfwgv-planner-table${table.__past ? ' is-past' : ''}`}>
                                                     <img
                                                         className="dfwgv-planner-thumb"
                                                         src={table.thumbUrl || `https://placehold.co/96x96/18181c/b8b8c2?text=No+Img`}
@@ -3246,6 +3312,8 @@ const PublicConventionPage = ({ conventionId }) => {
                                                     />
                                                     <div className="dfwgv-planner-info">
                                                         <span className="dfwgv-planner-game">
+                                                            {table.__past ? <span className="dfwgv-planner-timepill is-past">Past</span> : null}
+                                                            {startedToday ? <span className="dfwgv-planner-timepill is-started">Started</span> : null}
                                                             {table.bggId ? (
                                                                 <a href={`https://boardgamegeek.com/boardgame/${table.bggId}`} target="_blank" rel="noopener noreferrer">
                                                                     {table.gameName}
