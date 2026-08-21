@@ -566,8 +566,7 @@ const HomeView = memo(({
     loading,
     currentConvention,
     exportConventionGamesToCsv, toggleGameForConvention, toggleGameConventionCheckout, showMessage, setCurrentConventionId,
-    homeSearchInputRef, homeSearchTerm, setHomeSearchTerm, gamesByIdMap, conventions, goToConventions, copyPublicLink,
-    copyConventionId
+    homeSearchInputRef, homeSearchTerm, setHomeSearchTerm, gamesByIdMap, conventions, goToConventions, copyPublicLink
 }) => {
     const debouncedHomeSearchTerm = useDebounce(homeSearchTerm, 300); // Debounce search input
     const [showTopCheckouts, setShowTopCheckouts] = useState(false);
@@ -841,13 +840,6 @@ const HomeView = memo(({
                                 title="Copy a read-only link that shows this convention's games and live availability"
                             >
                                 🔗 Public link
-                            </button>
-                            <button
-                                onClick={() => copyConventionId(currentConvention)}
-                                className="dfwgv-btn dfwgv-btn-secondary"
-                                title="Copy the convention ID for the planner's admin 'Library convention ID' field"
-                            >
-                                🏷️ Copy ID
                             </button>
                         </div>
 
@@ -2941,7 +2933,6 @@ const App = () => {
                                 gamesByIdMap={gamesByIdMap} // Pass gamesByIdMap
                                 goToConventions={() => setCurrentPage('allConventions')}
                                 copyPublicLink={copyPublicLink}
-                                copyConventionId={copyConventionId}
                             />
                         )}
 
