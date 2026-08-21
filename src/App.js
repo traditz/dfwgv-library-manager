@@ -566,7 +566,8 @@ const HomeView = memo(({
     loading,
     currentConvention,
     exportConventionGamesToCsv, toggleGameForConvention, toggleGameConventionCheckout, showMessage, setCurrentConventionId,
-    homeSearchInputRef, homeSearchTerm, setHomeSearchTerm, gamesByIdMap, conventions, goToConventions, copyPublicLink
+    homeSearchInputRef, homeSearchTerm, setHomeSearchTerm, gamesByIdMap, conventions, goToConventions, copyPublicLink,
+    copyConventionId
 }) => {
     const debouncedHomeSearchTerm = useDebounce(homeSearchTerm, 300); // Debounce search input
     const [showTopCheckouts, setShowTopCheckouts] = useState(false);
@@ -840,6 +841,13 @@ const HomeView = memo(({
                                 title="Copy a read-only link that shows this convention's games and live availability"
                             >
                                 🔗 Public link
+                            </button>
+                            <button
+                                onClick={() => copyConventionId(currentConvention)}
+                                className="dfwgv-btn dfwgv-btn-secondary"
+                                title="Copy the convention ID for the planner's admin 'Library convention ID' field"
+                            >
+                                🏷️ Copy ID
                             </button>
                         </div>
 
@@ -1551,7 +1559,7 @@ const SyncPlannerModal = memo(({ convention, onClose, onSync, onUnlink, syncBusy
 const AllConventionsPage = memo(({
     conventions, currentConvention, createConvention, deleteConvention, updateConvention,
     loading, showMessage, setCurrentConventionId, setEditingConvention, copyPublicLink,
-    isAdmin, onSyncPlanner
+    copyConventionId, isAdmin, onSyncPlanner
 }) => {
     const [newConventionName, setNewConventionName] = useState('');
     const [newConventionStartDate, setNewConventionStartDate] = useState('');
@@ -1664,6 +1672,13 @@ const AllConventionsPage = memo(({
                                             title="Copy a read-only link that shows this convention's games and live availability"
                                         >
                                             🔗 Public link
+                                        </button>
+                                        <button
+                                            onClick={() => copyConventionId(conv)}
+                                            className="dfwgv-btn dfwgv-btn-secondary"
+                                            title="Copy the convention ID for the planner's admin 'Library convention ID' field"
+                                        >
+                                            🏷️ Copy ID
                                         </button>
                                         {isAdmin && (
                                             <button
@@ -1923,6 +1938,18 @@ const App = () => {
         } catch (error) {
             // Clipboard access can be blocked; fall back to showing the link for manual copy
             showMessage(`Public link for "${conv.name}": ${url}`, 'info');
+        }
+    }, [showToast, showMessage]);
+
+    // Copy just the convention's id — what the planner's admin "Library
+    // convention ID" field expects, so nobody has to parse it out of the URL.
+    const copyConventionId = useCallback(async (conv) => {
+        if (!conv) return;
+        try {
+            await navigator.clipboard.writeText(conv.id);
+            showToast(`Convention ID for "${conv.name}" copied — paste it into the planner's Library convention ID field.`);
+        } catch (error) {
+            showMessage(`Convention ID for "${conv.name}": ${conv.id}`, 'info');
         }
     }, [showToast, showMessage]);
 
@@ -2914,6 +2941,7 @@ const App = () => {
                                 gamesByIdMap={gamesByIdMap} // Pass gamesByIdMap
                                 goToConventions={() => setCurrentPage('allConventions')}
                                 copyPublicLink={copyPublicLink}
+                                copyConventionId={copyConventionId}
                             />
                         )}
 
@@ -2972,6 +3000,7 @@ const App = () => {
                                 setCurrentConventionId={setCurrentConventionId}
                                 setEditingConvention={setEditingConvention}
                                 copyPublicLink={copyPublicLink}
+                                copyConventionId={copyConventionId}
                                 isAdmin={isAdmin}
                                 onSyncPlanner={(conv) => setSyncingConventionId(conv.id)}
                             />
