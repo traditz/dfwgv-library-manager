@@ -1547,11 +1547,127 @@ const SyncPlannerModal = memo(({ convention, onClose, onSync, onUnlink, syncBusy
     );
 });
 
+// Copy a past convention's game list into another convention, optionally
+// limited to one owner's games. Checkout history is never carried over —
+// imported entries start fresh so the new convention's stats stay clean.
+const ImportFromConventionModal = memo(({ targetConvention, conventions, gamesByIdMap, onClose, onImport, importBusy }) => {
+    const [sourceId, setSourceId] = useState('');
+    const [owner, setOwner] = useState('All');
+
+    const sourceOptions = useMemo(() => {
+        return conventions
+            .filter(conv => conv.id !== targetConvention.id)
+            .sort((a, b) => new Date(b.startDate) - new Date(a.startDate));
+    }, [conventions, targetConvention.id]);
+
+    const source = sourceOptions.find(conv => conv.id === sourceId) || null;
+    const sourceGames = useMemo(() => (source?.games || []).filter(g => g && g.id), [source]);
+
+    // Owners present in the chosen source convention, with per-owner counts
+    const ownerCounts = useMemo(() => {
+        const counts = new Map();
+        for (const game of sourceGames) {
+            const name = String(game.ownerName || 'Unknown');
+            counts.set(name, (counts.get(name) || 0) + 1);
+        }
+        return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    }, [sourceGames]);
+
+    // What the current selection would actually do, split into the three outcomes
+    const preview = useMemo(() => {
+        const targetIds = new Set((targetConvention.games || []).map(g => g.id));
+        const matching = sourceGames.filter(g => owner === 'All' || String(g.ownerName || 'Unknown') === owner);
+        let toImport = 0;
+        let alreadyThere = 0;
+        let missing = 0;
+        for (const game of matching) {
+            if (targetIds.has(game.id)) alreadyThere++;
+            else if (!gamesByIdMap.has(game.id)) missing++;
+            else toImport++;
+        }
+        return { matching: matching.length, toImport, alreadyThere, missing };
+    }, [sourceGames, owner, targetConvention.games, gamesByIdMap]);
+
+    return (
+        <div className="dfwgv-modal-overlay fixed inset-0 flex items-center justify-center z-50 p-4">
+            <div className="dfwgv-modal-panel bg-gray-800 rounded-lg shadow-xl p-6 max-w-lg w-full border border-gray-700">
+                <h2 className="text-xl font-semibold text-gray-100 mb-1">Import library from another convention</h2>
+                <p className="text-gray-300 text-sm mb-4">
+                    Copies games into <span className="font-semibold text-gray-100">{targetConvention.name}</span>.
+                    Checkout counts start at zero — the source convention is left untouched.
+                </p>
+
+                {sourceOptions.length === 0 ? (
+                    <p className="text-gray-400 text-sm mb-4">There's no other convention to import from yet.</p>
+                ) : (
+                    <div className="flex flex-col gap-4 mb-4">
+                        <label className="block text-sm font-medium text-gray-300">
+                            Import from
+                            <select
+                                className="mt-1 w-full p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100"
+                                value={sourceId}
+                                onChange={(e) => { setSourceId(e.target.value); setOwner('All'); }}
+                            >
+                                <option value="">Select a convention…</option>
+                                {sourceOptions.map(conv => (
+                                    <option key={conv.id} value={conv.id}>
+                                        {conv.name} ({new Date(conv.startDate).toLocaleDateString()}) — {(conv.games || []).length} games
+                                    </option>
+                                ))}
+                            </select>
+                        </label>
+
+                        <label className="block text-sm font-medium text-gray-300">
+                            Owner
+                            <select
+                                className="mt-1 w-full p-3 border border-gray-600 rounded-md bg-gray-700 text-gray-100"
+                                value={owner}
+                                onChange={(e) => setOwner(e.target.value)}
+                                disabled={!source}
+                            >
+                                <option value="All">All owners{source ? ` (${sourceGames.length} games)` : ''}</option>
+                                {ownerCounts.map(([name, count]) => (
+                                    <option key={name} value={name}>{name} ({count} games)</option>
+                                ))}
+                            </select>
+                        </label>
+
+                        {source && (
+                            <div className="dfwgv-import-status">
+                                <span>
+                                    {preview.toImport > 0
+                                        ? <><b className="text-gray-100">{preview.toImport}</b> game{preview.toImport === 1 ? '' : 's'} will be imported.</>
+                                        : 'Nothing to import with these choices.'}
+                                    {preview.alreadyThere > 0 && <> {preview.alreadyThere} already in this convention (skipped).</>}
+                                    {preview.missing > 0 && <> {preview.missing} no longer in the library (skipped).</>}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="flex flex-wrap justify-end gap-3">
+                    <button
+                        onClick={() => source && onImport(source, owner)}
+                        className="dfwgv-btn dfwgv-btn-primary"
+                        disabled={!source || preview.toImport === 0 || importBusy}
+                    >
+                        {importBusy ? 'Importing…' : `Import ${preview.toImport || ''} games`.trim()}
+                    </button>
+                    <button onClick={onClose} className="dfwgv-btn dfwgv-btn-secondary" disabled={importBusy}>
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+});
+
 // New All Conventions Page Component
 const AllConventionsPage = memo(({
     conventions, currentConvention, createConvention, deleteConvention, updateConvention,
     loading, showMessage, setCurrentConventionId, setEditingConvention, copyPublicLink,
-    copyConventionId, isAdmin, onSyncPlanner
+    copyConventionId, isAdmin, onSyncPlanner, onImportLibrary
 }) => {
     const [newConventionName, setNewConventionName] = useState('');
     const [newConventionStartDate, setNewConventionStartDate] = useState('');
@@ -1671,6 +1787,14 @@ const AllConventionsPage = memo(({
                                             title="Copy the convention ID for the planner's admin 'Library convention ID' field"
                                         >
                                             🏷️ Copy ID
+                                        </button>
+                                        <button
+                                            onClick={() => onImportLibrary(conv)}
+                                            className="dfwgv-btn dfwgv-btn-secondary"
+                                            disabled={loading}
+                                            title="Copy games from another convention's library into this one, optionally filtered by owner"
+                                        >
+                                            📥 Import library
                                         </button>
                                         {isAdmin && (
                                             <button
@@ -1919,6 +2043,10 @@ const App = () => {
     // Planner sync state: which convention's sync modal is open, and whether a sync is running
     const [syncingConventionId, setSyncingConventionId] = useState(null);
     const [plannerSyncBusy, setPlannerSyncBusy] = useState(false);
+
+    // Which convention's "Import library" modal is open, and whether an import is running
+    const [importingIntoConventionId, setImportingIntoConventionId] = useState(null);
+    const [libraryImportBusy, setLibraryImportBusy] = useState(false);
 
     // Copy a convention's public read-only link (?con=<id>) to the clipboard
     const copyPublicLink = useCallback(async (conv) => {
@@ -2191,6 +2319,85 @@ const App = () => {
             setPlannerSyncBusy(false);
         }
     }, [db, currentUser, appId, showToast, showMessage]);
+
+    // Copy a source convention's games into a target convention, optionally limited
+    // to one owner. Game details are taken from the current library so imported
+    // entries carry up-to-date art and stats, and every entry starts with zeroed
+    // checkout counters — the source convention is never modified.
+    const importConventionLibrary = useCallback(async (targetConventionId, sourceConvention, ownerFilter) => {
+        if (!db || !currentUser) {
+            showMessage("Please log in to import a convention library.", 'error');
+            return;
+        }
+        const targetConvention = conventions.find(conv => conv.id === targetConventionId);
+        if (!targetConvention || !sourceConvention) {
+            showMessage("Convention not found. Please refresh and try again.", 'error');
+            return;
+        }
+
+        setLibraryImportBusy(true);
+        try {
+            const existingGames = targetConvention.games || [];
+            const existingIds = new Set(existingGames.map(g => g.id));
+
+            let skippedExisting = 0;
+            let skippedMissing = 0;
+            const newEntries = [];
+
+            for (const sourceGame of (sourceConvention.games || [])) {
+                if (!sourceGame || !sourceGame.id) continue;
+                if (ownerFilter !== 'All' && String(sourceGame.ownerName || 'Unknown') !== ownerFilter) continue;
+                if (existingIds.has(sourceGame.id)) { skippedExisting++; continue; }
+
+                // Only import games still active in the library; a removed game
+                // isn't physically available to lend at the new convention.
+                const libraryGame = gamesByIdMap.get(sourceGame.id);
+                if (!libraryGame) { skippedMissing++; continue; }
+
+                newEntries.push({
+                    id: libraryGame.id,
+                    bggId: libraryGame.bggId ?? sourceGame.bggId ?? null,
+                    name: libraryGame.name ?? sourceGame.name,
+                    ownerName: libraryGame.ownerName ?? sourceGame.ownerName ?? '',
+                    thumbnail: libraryGame.thumbnail ?? sourceGame.thumbnail ?? '',
+                    minPlayers: libraryGame.minPlayers ?? sourceGame.minPlayers ?? null,
+                    maxPlayers: libraryGame.maxPlayers ?? sourceGame.maxPlayers ?? null,
+                    playingTime: libraryGame.playingTime ?? sourceGame.playingTime ?? null,
+                    averageRating: libraryGame.averageRating ?? sourceGame.averageRating ?? null,
+                    conventionCheckoutCount: 0,
+                    isCheckedOutAtConvention: false,
+                    conventionCheckoutTimes: [],
+                });
+                existingIds.add(sourceGame.id);
+            }
+
+            if (newEntries.length === 0) {
+                showMessage(
+                    `Nothing imported from "${sourceConvention.name}".` +
+                    (skippedExisting ? ` ${skippedExisting} already in this convention.` : '') +
+                    (skippedMissing ? ` ${skippedMissing} no longer in the library.` : ''),
+                    'info'
+                );
+                return;
+            }
+
+            const conventionRef = doc(db, `artifacts/${appId}/public/data/conventions`, targetConventionId);
+            await updateDoc(conventionRef, { games: [...existingGames, ...newEntries] });
+
+            showToast(
+                `Imported ${newEntries.length} game${newEntries.length === 1 ? '' : 's'} from "${sourceConvention.name}"` +
+                (ownerFilter !== 'All' ? ` (${ownerFilter})` : '') + '.' +
+                (skippedExisting ? ` ${skippedExisting} already there.` : '') +
+                (skippedMissing ? ` ${skippedMissing} skipped as removed.` : '')
+            );
+            setImportingIntoConventionId(null);
+        } catch (error) {
+            console.error('[ImportConventionLibrary] Import failed:', error);
+            showMessage(`Import failed: ${error.message}`, 'error');
+        } finally {
+            setLibraryImportBusy(false);
+        }
+    }, [db, currentUser, appId, conventions, gamesByIdMap, showToast, showMessage]);
 
     // Listen for real-time updates to games and conventions
     useEffect(() => {
@@ -2994,8 +3201,23 @@ const App = () => {
                                 copyConventionId={copyConventionId}
                                 isAdmin={isAdmin}
                                 onSyncPlanner={(conv) => setSyncingConventionId(conv.id)}
+                                onImportLibrary={(conv) => setImportingIntoConventionId(conv.id)}
                             />
                         )}
+
+                        {importingIntoConventionId && (() => {
+                            const targetConvention = conventions.find(conv => conv.id === importingIntoConventionId);
+                            return targetConvention ? (
+                                <ImportFromConventionModal
+                                    targetConvention={targetConvention}
+                                    conventions={conventions}
+                                    gamesByIdMap={gamesByIdMap}
+                                    onClose={() => setImportingIntoConventionId(null)}
+                                    onImport={(source, owner) => importConventionLibrary(importingIntoConventionId, source, owner)}
+                                    importBusy={libraryImportBusy}
+                                />
+                            ) : null;
+                        })()}
 
                         {syncingConventionId && (() => {
                             const syncingConvention = conventions.find(conv => conv.id === syncingConventionId);
